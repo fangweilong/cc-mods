@@ -1,0 +1,8 @@
+{
+  "name": "subagent-split-view",
+  "version": "0.1.0",
+  "author": {
+    "name": "teler"
+  },
+  "description": "A live docked pane that shows Subagent thinking, tools, and results."
+}

@@ -1,0 +1,9 @@
+{
+  "name": "statusline-mod",
+  "version": "0.1.0",
+  "author": {
+    "name": "teler"
+  },
+  "description": "A Claude Code Mod status HUD with model, context, tokens, Git, tools, and agents.",
+  "types": "./types/index.d.ts"
+}

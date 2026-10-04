@@ -1,0 +1,8 @@
+{
+  "name": "user-prompt-frame",
+  "version": "0.1.0",
+  "author": {
+    "name": "teler"
+  },
+  "description": "Frames user transcript messages with a Chinese title and viewport-aware borders."
+}

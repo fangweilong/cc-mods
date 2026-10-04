@@ -1,0 +1,16 @@
+# Claude Code 本地生成的类型声明和编辑器配置
+.claude-plugin/types/
+tsconfig.json
+
+# 本地环境和会话数据
+.claude/
+.env
+.env.*
+*.log
+
+# 编辑器和系统文件
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+node_modules/
