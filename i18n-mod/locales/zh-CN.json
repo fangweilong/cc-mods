@@ -1,0 +1,58 @@
+{
+  "id": "zh-CN",
+  "name": "简体中文",
+  "running": "处理中",
+  "completed": "已完成",
+  "duration": "{word}，用时 {duration}",
+  "hints": {
+    "shortcuts": "查看快捷键",
+    "interrupt": "中断",
+    "background": "转入后台运行",
+    "expand": "展开",
+    "collapse": "收起",
+    "history": "查看历史",
+    "cycleMode": "切换模式",
+    "acceptSuggestion": "接受建议"
+  },
+  "modes": {
+    "focus": "专注模式",
+    "memory paused": "记忆已暂停",
+    "accept edits on": "自动接受编辑已开启",
+    "plan mode on": "计划模式已开启",
+    "auto mode on": "自动模式已开启",
+    "bypass permissions on": "权限绕过已开启"
+  },
+  "messages": {
+    "Working": "处理中",
+    "Thinking": "思考中",
+    "Thinking…": "思考中…",
+    "Thinking...": "思考中...",
+    "Waiting for response": "等待响应",
+    "Waiting for response…": "等待响应…",
+    "Waiting for response...": "等待响应...",
+    "Compacting conversation": "正在压缩会话",
+    "Compacting conversation…": "正在压缩会话…",
+    "Compacting conversation...": "正在压缩会话..."
+  },
+  "notices": {
+    "Welcome back!": "欢迎回来！",
+    "Welcome to Claude Code!": "欢迎使用 Claude Code！",
+    "Tips for getting started": "入门提示",
+    "Context left until auto-compact": "自动压缩前剩余上下文",
+    "Auto-update failed": "自动更新失败",
+    "Update available": "有可用更新",
+    "Using custom model": "正在使用自定义模型"
+  },
+  "command": {
+    "description": "选择界面提示的显示语言",
+    "current": "当前界面语言：{language}",
+    "available": "可选语言代码：{languages}；也可指定 JSON 文件路径。",
+    "switched": "界面语言已切换为 {language}。",
+    "unsupported": "无效的语言代码或 JSON 路径：{language}",
+    "saveFailed": "界面语言保存失败：{reason}",
+    "usage": "用法：/i18n [list | reload | <语言代码或 JSON 路径>]",
+    "source": "语言来源：{source}",
+    "loadFailed": "语言包加载失败，已保留当前语言：{reason}",
+    "reloaded": "语言包已重新加载：{language}。"
+  }
+}

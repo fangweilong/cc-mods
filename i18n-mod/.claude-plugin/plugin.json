@@ -1,0 +1,17 @@
+{
+  "name": "i18n-mod",
+  "version": "0.1.0",
+  "author": {
+    "name": "teler"
+  },
+  "description": "Localize supported Claude Code UI hints with selectable, extensible language packs.",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "language": {
+      "type": "string",
+      "title": "UI language / JSON language pack",
+      "description": "Language code or JSON file path; relative paths resolve under this plugin. en preserves the original UI.",
+      "default": "zh-CN"
+    }
+  }
+}

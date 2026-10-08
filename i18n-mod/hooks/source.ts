@@ -1,0 +1,35 @@
+// 原文匹配规则独立于语言包，译者无需维护这些词表。
+export const SPINNER_WORDS = new Set([
+  'working', 'thinking', 'reasoning', 'responding', 'processing', 'loading',
+  'requesting', 'analyzing', 'searching', 'reading', 'writing', 'creating',
+  'running', 'executing', 'computing', 'calculating', 'planning', 'pondering',
+  'considering', 'contemplating', 'exploring', 'investigating', 'synthesizing', 'generating',
+  'preparing', 'assembling', 'building', 'crafting', 'composing', 'cooking',
+  'baking', 'brewing', 'sauteing', 'sautéing', 'simmering', 'stewing',
+  'churning', 'crunching', 'noodling', 'cogitating', 'ideating', 'musing',
+  'ruminating', 'deliberating', 'determining', 'deciphering', 'discombobulating', 'combobulating',
+  'percolating', 'manifesting', 'coalescing', 'unfurling', 'spinning', 'whirring',
+  'wandering', 'hatching', 'tinkering', 'wrangling', 'beaming', 'booping',
+  'bouncing', 'chasing', 'conjuring', 'cuddling', 'dancing', 'discovering',
+  'doodling', 'enchanting', 'foraging', 'forging', 'giggling', 'gliding',
+  'greeting', 'growing', 'herding', 'honking', 'hopping', 'hugging',
+  'imagining', 'inventing', 'jingling', 'juggling', 'jumping', 'kindling',
+  'knitting', 'launching', 'leaping', 'marinating', 'meandering', 'mixing',
+  'moseying', 'munching', 'napping', 'nibbling', 'orbiting', 'painting',
+  'petting', 'plotting', 'popping', 'prancing', 'puzzling', 'questing',
+  'riding', 'rolling', 'sauteeing', 'scribbling', 'seeking', 'singing',
+  'snacking', 'sniffing', 'snuggling', 'soaring', 'sparking', 'splashing',
+  'sprouting', 'squishing', 'stargazing', 'stirring', 'strolling', 'swimming',
+  'swinging', 'tickling', 'toasting', 'twirling', 'waddling', 'weaving',
+  'whistling', 'wibbling', 'wiggling', 'wishing', 'wobbling', 'wondering',
+  'yawning', 'zooming',
+])
+
+export const DURATION_WORDS = new Set([
+  'worked', 'thought', 'reasoned', 'processed', 'analyzed', 'computed',
+  'generated', 'cooked', 'baked', 'brewed', 'sauteed', 'sautéed',
+  'simmered', 'stewed', 'churned', 'crunched', 'noodled', 'cogitated',
+  'pondered', 'considered', 'contemplated', 'synthesized', 'crafted', 'composed',
+  'ruminated', 'deliberated', 'percolated', 'manifested', 'coalesced', 'unfurled',
+  'spun', 'whirred', 'wandered', 'hatched', 'tinkered', 'wrangled',
+])
