@@ -1,4 +1,3 @@
-import { atom, read, update } from 'claude-code'
 import type {
   AgentInfo,
   EngineInterface,
@@ -116,8 +115,6 @@ export const DEFAULT_CONFIG: StatusConfig = {
   },
 }
 
-const configAtom = atom({ plugin: 'statusline-mod', key: 'config' } as const, cloneConfig(DEFAULT_CONFIG))
-
 const I18N = {
   en: { idle: 'Idle', running: 'Running', thinking: 'Thinking', ctx: 'ctx', cache: 'cache' },
   zh: { idle: '就绪', running: '运行中', thinking: '思考中', ctx: '上下文', cache: '缓存' },
@@ -174,11 +171,9 @@ const FINISHED_AGENT_STATUSES = new Set([
   'terminated',
 ])
 
-const CONFIG_PANE = 'my-cc-mods-config'
 let config: StatusConfig = cloneConfig(DEFAULT_CONFIG)
 let activeTurn = false
 let configPath = ''
-let draftConfig: StatusConfig | undefined
 const agentDetails = new Map<string, AgentDetail>()
 
 let snapshot: StatusSnapshot = {
@@ -601,174 +596,6 @@ async function readConfig($: EngineInterface, home: string): Promise<void> {
   } catch {
     config = cloneConfig(DEFAULT_CONFIG)
   }
-  draftConfig = undefined
-}
-
-async function syncConfigState($: EngineInterface): Promise<void> {
-  await update($, configAtom, () => cloneConfig(config))
-}
-
-async function commitConfig($: EngineInterface, next: StatusConfig): Promise<void> {
-  config = cloneConfig(next)
-  await update($, configAtom, () => cloneConfig(config))
-
-  try {
-    if (configPath) {
-      await $.fs.write(configPath, `${JSON.stringify(config, null, 2)}\n`)
-    }
-  } catch {
-    $.ui.toast('Statusline config changed for this session; file save failed.')
-  }
-  show($)
-}
-
-async function updateConfigDraft($: EngineInterface, mutate: (current: StatusConfig) => StatusConfig): Promise<void> {
-  const current = await read($, configAtom)
-  const next = mutate(cloneConfig(current ?? DEFAULT_CONFIG))
-  config = next
-  draftConfig = next
-  await update($, configAtom, () => cloneConfig(next))
-}
-
-async function saveCurrentConfig($: EngineInterface): Promise<void> {
-  const current = draftConfig ?? await read($, configAtom)
-  config = cloneConfig(current ?? config)
-  draftConfig = undefined
-  await update($, configAtom, () => cloneConfig(config))
-  try {
-    if (configPath) {
-      await $.fs.write(configPath, `${JSON.stringify(config, null, 2)}\n`)
-    }
-    $.ui.toast('Configuration saved.')
-  } catch {
-    $.ui.toast('Configuration save failed.')
-  }
-}
-
-async function changeConfig($: EngineInterface, mutate: (current: StatusConfig) => StatusConfig): Promise<void> {
-  await updateConfigDraft($, mutate)
-}
-
-function configModuleLabel(module: ModuleId, language: Language): string {
-  const labels: Record<ModuleId, { en: string; zh: string }> = {
-    model: { en: 'Model', zh: '模型' },
-    state: { en: 'State', zh: '状态' },
-    env: { en: 'Environment', zh: '环境' },
-    git: { en: 'Git', zh: 'Git' },
-    git_stat: { en: 'Git diff', zh: 'Git 增删' },
-    context: { en: 'Context', zh: '上下文' },
-    tokens: { en: 'Tokens', zh: 'Token' },
-    cache: { en: 'Cache', zh: '缓存' },
-    quota: { en: 'Quota', zh: '配额' },
-    cost: { en: 'Cost', zh: '花费' },
-    cwd: { en: 'Workspace', zh: '目录' },
-  }
-  return labels[module][language]
-}
-
-async function renderConfigPane($: EngineInterface, e: any): Promise<any> {
-  const stateConfig = await read($, configAtom)
-  const current = draftConfig ?? cloneConfig(stateConfig ?? DEFAULT_CONFIG)
-  if (!draftConfig) draftConfig = cloneConfig(current)
-  const { Box, Button, Input, Text } = $.ui.resolve(e)
-  const language = current.language
-  const title = language === 'zh' ? 'Statusline 配置' : 'Statusline Configuration'
-  const enabled = language === 'zh' ? '启用' : 'ON'
-  const disabled = language === 'zh' ? '停用' : 'OFF'
-  const moveUp = language === 'zh' ? '上移' : '↑'
-  const moveDown = language === 'zh' ? '下移' : '↓'
-  const close = language === 'zh' ? '关闭' : 'Close'
-  const save = language === 'zh' ? '保存配置' : 'Save configuration'
-  const languageLabel = language === 'zh' ? '语言：中文' : 'Language: English'
-  const frameFields = [
-    ['title', language === 'zh' ? '标题' : 'Title'],
-    ['color', language === 'zh' ? '边框颜色' : 'Border color'],
-    ['horizontal', language === 'zh' ? '横线符号' : 'Horizontal'],
-    ['vertical', language === 'zh' ? '竖线符号' : 'Vertical'],
-    ['topLeft', language === 'zh' ? '左上角' : 'Top-left'],
-    ['topRight', language === 'zh' ? '右上角' : 'Top-right'],
-    ['bottomLeft', language === 'zh' ? '左下角' : 'Bottom-left'],
-    ['bottomRight', language === 'zh' ? '右下角' : 'Bottom-right'],
-  ] as const
-  const frameInputs = frameFields.map(([field, label]) => Input({
-    key: `prompt-frame-${field}`,
-    label,
-    value: current.promptFrame[field],
-    submitLabel: '',
-    onInput: value => {
-      const base = cloneConfig(draftConfig ?? config)
-      draftConfig = {
-        ...base,
-        promptFrame: { ...base.promptFrame, [field]: value || base.promptFrame[field] },
-      }
-    },
-    onSubmit: () => undefined,
-  }))
-
-  const moduleRows = current.order.map((module, index) => Box({
-    children: [
-      Text({ color: UI_COLORS.gray, children: [`${String(index + 1).padStart(2, ' ')}. ${configModuleLabel(module, language)} `] }),
-      Button({
-        label: current.modules[module] ? enabled : disabled,
-        onPress: () => changeConfig($, latest => ({
-          ...latest,
-          modules: { ...latest.modules, [module]: !latest.modules[module] },
-        })),
-      }),
-      Button({
-        label: moveUp,
-        onPress: () => changeConfig($, latest => {
-          const position = latest.order.indexOf(module)
-          if (position <= 0) return latest
-          const order = [...latest.order]
-          ;[order[position - 1], order[position]] = [order[position], order[position - 1]]
-          return { ...latest, order }
-        }),
-      }),
-      Button({
-        label: moveDown,
-        onPress: () => changeConfig($, latest => {
-          const position = latest.order.indexOf(module)
-          if (position < 0 || position >= latest.order.length - 1) return latest
-          const order = [...latest.order]
-          ;[order[position], order[position + 1]] = [order[position + 1], order[position]]
-          return { ...latest, order }
-        }),
-      }),
-    ],
-  }))
-
-  return Box({
-    flexDirection: 'column',
-    children: [
-      Text({ color: UI_COLORS.cyan, bold: true, children: [title] }),
-      Text({ color: UI_COLORS.cyan, bold: true, children: [language === 'zh' ? '通用设置' : 'Global'] }),
-      Box({
-        children: [
-          Text({ color: UI_COLORS.gray, children: ['Language / 语言: '] }),
-          Button({
-            label: languageLabel,
-            onPress: () => changeConfig($, latest => ({ ...latest, language: latest.language === 'en' ? 'zh' : 'en' })),
-          }),
-        ],
-      }),
-      Text({ color: UI_COLORS.cyan, bold: true, children: [language === 'zh' ? '状态栏模块' : 'Statusline modules'] }),
-      Text({ color: UI_COLORS.gray, children: [language === 'zh' ? '模块：按钮可切换、↑/↓ 可排序' : 'Toggle modules or reorder them with the buttons'] }),
-      ...moduleRows,
-      Text({ color: UI_COLORS.cyan, bold: true, children: [language === 'zh' ? '用户输入框' : 'User prompt frame'] }),
-      Text({ color: UI_COLORS.gray, children: [language === 'zh' ? '修改字段后点击保存配置' : 'Edit fields, then click Save configuration'] }),
-      ...frameInputs,
-      Box({
-        children: [
-          Button({ label: save, variant: 'primary', onPress: () => saveCurrentConfig($) }),
-          Button({ label: close, role: 'dismiss', onPress: () => {
-            draftConfig = undefined
-            void $.ui.close({ id: CONFIG_PANE })
-          } }),
-        ],
-      }),
-    ],
-  })
 }
 
 async function detectEnvironment($: EngineInterface): Promise<string | undefined> {
@@ -881,7 +708,6 @@ async function refreshAgents($: EngineInterface): Promise<void> {
 async function refreshSession($: EngineInterface, cwd: string): Promise<void> {
   snapshot = { ...snapshot, cwd, home: await homeDirectory($) }
   await readConfig($, snapshot.home)
-  await syncConfigState($)
 
   try {
     const [model, usage] = await Promise.all([$.session.model(), $.session.usage()])
@@ -898,7 +724,6 @@ async function refreshSession($: EngineInterface, cwd: string): Promise<void> {
 
 async function refreshLiveData($: EngineInterface): Promise<void> {
   await readConfig($, snapshot.home)
-  await syncConfigState($)
   const [env] = await Promise.all([detectEnvironment($), readGit($), refreshAgents($)])
   snapshot = { ...snapshot, env }
 }
@@ -930,28 +755,20 @@ export const register: Register = on => {
     })
   })
 
-  on('ui.input', { plugin: 'statusline-mod', component: 'Pane', kind: 'submit' }, ($, e) => ({
-    element: e.element,
-    value: e.value,
-  }))
-
-  on('ui.render', { component: 'Pane', requestId: CONFIG_PANE }, ($, e) => renderConfigPane($, e))
-
-  on('session.start', async ($, e, next) => {
-    await $.command.register({
-      name: 'my-cc-mods-config',
-      description: 'Show the my-cc-mods configuration and config file path.',
-    })
+  // 统一面板保存兼容文件后刷新；不依赖配置插件的状态或加载顺序。
+  on('fs.write', async ($, e, next) => {
     const result = await next(e)
-    await refreshSession($, e.cwd)
+    if (result.deny === undefined && configPath && e.path.replace(/\\/gu, '/') === configPath.replace(/\\/gu, '/')) {
+      await readConfig($, snapshot.home)
+      show($)
+    }
     return result
   })
 
-  on('command.run', { command: 'my-cc-mods-config' }, async $ => {
-    await readConfig($, snapshot.home || await homeDirectory($))
-    await syncConfigState($)
-    await $.ui.open({ id: CONFIG_PANE, title: 'Statusline Config', focus: true, closeOnEscape: true })
-    return { text: 'Statusline configuration panel opened.' }
+  on('session.start', async ($, e, next) => {
+    const result = await next(e)
+    await refreshSession($, e.cwd)
+    return result
   })
 
   on('session.measure', async ($, e, next) => {
@@ -962,7 +779,7 @@ export const register: Register = on => {
   })
 
   on('turn.start', async ($, e, next) => {
-    if (!e.agentId) {
+    if (!('agentId' in e && e.agentId)) {
       activeTurn = true
       snapshot = { ...snapshot, state: 'Thinking' }
       show($)

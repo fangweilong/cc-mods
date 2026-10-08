@@ -1,4 +1,4 @@
-import { expect, test } from 'claude-code/testing'
+import { expect, mock, test } from 'claude-code/testing'
 
 for (const surface of ['terminal', 'desktop', 'vscode', 'mobile'] as const) {
   test(`frames composer prompts on ${surface}`, async $ => {
@@ -171,3 +171,22 @@ test('frames a transcript remount with a new request identity', async $ => {
   expect(await transcript.find({ type: 'Text', text: /用户输入/ })).toBeDefined()
   await transcript.unmount()
 })
+
+for (const surface of ['terminal', 'desktop'] as const) {
+  test(`reads the standalone panel's saved prompt-frame format on ${surface}`, async ($, on) => {
+    mock.env(on, { HOME: 'D:/test-home' })
+    const paths: string[] = []
+    on('fs.read', ($, e) => {
+      paths.push(e.path)
+      return { value: JSON.stringify({ language: 'zh', promptFrame: { title: '独立面板设置', color: 'green' } }) }
+    })
+    const ui = await $.ui.mount({
+      plugin: 'user-prompt-frame', surface, component: 'UserMessage',
+      props: { text: '兼容格式', origin: { kind: 'composer' }, isExpanded: true },
+    })
+    expect(await ui.find({ type: 'Text', text: /独立面板设置/ })).toBeDefined()
+    expect((await ui.find({ type: 'Text', text: /独立面板设置/ }))?.props.color).toBe('green')
+    expect(paths.every(path => path.replace(/\\/gu, '/').endsWith('/.config/my-cc-mods/config.json'))).toBe(true)
+    await ui.unmount()
+  })
+}

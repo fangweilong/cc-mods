@@ -1,0 +1,9 @@
+{
+  "name": "cc-mods-config",
+  "version": "0.1.0",
+  "author": {
+    "name": "teler"
+  },
+  "description": "Standalone unified configuration panel for CC Mods.",
+  "types": "./types/index.d.ts"
+}

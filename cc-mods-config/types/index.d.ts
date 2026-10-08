@@ -28,3 +28,17 @@ export type StatuslineConfig = {
   modules: Record<StatuslineModule, boolean>
   promptFrame: PromptFrameConfig
 }
+
+export type I18nConfigDraft = {
+  source: string | null
+  error: string
+}
+
+declare module 'claude-code' {
+  interface PluginState {
+    'cc-mods-config': {
+      config: StatuslineConfig
+      i18nDraft: I18nConfigDraft
+    }
+  }
+}
