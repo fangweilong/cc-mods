@@ -33,6 +33,10 @@ Subagent 启动后会自动请求打开面板，也可以手动执行：
 
 面板使用 Claude Code 原生 `Pane`。全屏终端且宽度足够时显示在主会话右侧；终端较窄时会等待，执行 `/subagent-view` 或扩大终端后打开。
 
+## 配置
+
+本仓库所有可调配置统一在 **`/my-cc-mods-config` 可视化面板**管理（由独立的 `cc-mods-config` 插件提供）。本 Mod 当前自动工作，没有可调配置；`/subagent-view` 和 `clear` 是运行操作，不是独立配置入口。后续新增设置也应接入统一面板。
+
 ## 设计边界
 
 本 Mod 只观察和渲染 Subagent 事件，不创建 Agent、不修改 Agent 参数、不改变权限和工具执行结果。日志仅保存在当前 Claude Code 进程内，最多保留每个 Agent 120 条记录。

@@ -1,6 +1,6 @@
 # Claude Code Statusline Mod
 
-通过 Claude Code Mod API 复刻 `cc-status-line` 的 statusline 版本，不依赖外部 Python 命令。
+通过 Claude Code Mod API 复刻 `cc-status-line` 的 statusline 版本，不依赖外部 Python 命令。统一配置面板由独立的 `cc-mods-config` 插件提供。
 
 状态行使用 `SessionMode` 原生 UI 插槽渲染为两行：第一行显示 `accept edits on` 等模式提示，第二行从左侧显示状态栏。`PromptHint` 保持为空以避免重复渲染。不会使用 `$.ui.status()` 文本入口，因此不会出现 ANSI 控制符乱码，也不会自动附加 `statusline-mod:` 插件前缀。
 
@@ -87,19 +87,13 @@ Mod 读取与 Python 版本相同的配置文件：
 - `modules`: 各模块启用/停用
 - `promptFrame`: 用户输入框标题、边框颜色、横竖线及四角符号
 
-运行 `/my-cc-mods-config` 会打开 Mod 内置配置面板：
+统一配置由独立的 [`cc-mods-config`](../cc-mods-config/README.md) 插件管理。加载该插件后执行 `/my-cc-mods-config`，可修改状态栏语言、模块开关与顺序。
 
-- 切换 `en` / `zh`
-- 启用/停用模块
-- 调整模块顺序
-- 编辑用户输入框标题、颜色和边框符号
-- 关闭面板
-
-修改后点击 `Save configuration` 才会写回配置文件；`Close` 只关闭面板，不保存未提交的草稿。
+本 Mod 不注册配置命令、不渲染配置面板、不写配置文件，也不依赖配置插件才能运行。面板保存兼容配置文件后，状态栏会重新读取并刷新；手动修改文件则在下一次会话测量或回合结束时读取。配置插件不依赖状态栏，未加载本 Mod 时仍可使用面板预先配置。
 
 ## 与现有 statusline 的关系
 
-这个 Mod 使用 `SessionMode` 原生 UI 在输入框下方绘制两行状态区域，不会修改 `settings.json`，也不会覆盖原生 `statusLine` / `subagentStatusLine` 配置。颜色使用 UI 的 RGB `Text.color`，不会把 ANSI 转义序列当作普通文本输出。
+这个 Mod 使用 `SessionMode` 原生 UI 在输入框下方绘制两行状态区域，不会直接改写 `settings.json`。不会覆盖原生 `statusLine` / `subagentStatusLine` 配置。颜色使用 UI 的 RGB `Text.color`，不会把 ANSI 转义序列当作普通文本输出。
 
 如果要单独测试 Mod 版本，请手动暂时注释当前配置中的：
 
