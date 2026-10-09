@@ -22,7 +22,12 @@ export type PromptFrameConfig = {
   bottomRight: string
 }
 
+export type StatuslinePosition = 'session-mode' | 'below-prompt'
+export type StatuslineDisplayMode = 'full' | 'compact'
+
 export type StatuslineConfig = {
+  position: StatuslinePosition
+  displayMode: StatuslineDisplayMode
   language: 'en' | 'zh'
   order: StatuslineModule[]
   modules: Record<StatuslineModule, boolean>

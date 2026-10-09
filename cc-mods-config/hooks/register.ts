@@ -1,6 +1,6 @@
 import { atom, read, update } from 'claude-code'
 import type { ConfigRow, EngineInterface, Register } from 'claude-code'
-import type { I18nConfigDraft, StatuslineConfig, StatuslineModule } from '../types'
+import type { I18nConfigDraft, StatuslineConfig, StatuslineDisplayMode, StatuslineModule, StatuslinePosition } from '../types'
 
 const UI_COLORS = { cyan: '#50c8ff', red: '#ff5a64', gray: '#8791a0' } as const
 
@@ -24,6 +24,8 @@ export type Language = 'en' | 'zh'
 export type StatusConfig = StatuslineConfig
 
 export const DEFAULT_CONFIG: StatusConfig = {
+  position: 'session-mode',
+  displayMode: 'full',
   language: 'en',
   order: [...DEFAULT_ORDER],
   modules: {
@@ -61,6 +63,8 @@ let draftConfig: StatusConfig | undefined
 
 function cloneConfig(value: StatusConfig): StatusConfig {
   return {
+    position: value.position,
+    displayMode: value.displayMode,
     language: value.language,
     order: [...value.order],
     modules: { ...value.modules },
@@ -73,10 +77,20 @@ export function normalizeConfig(value: unknown): StatusConfig {
   if (!value || typeof value !== 'object') return result
 
   const data = value as {
+    position?: unknown
+    displayMode?: unknown
     language?: unknown
     order?: unknown
     modules?: unknown
     promptFrame?: unknown
+  }
+
+  if (data.position === 'session-mode' || data.position === 'below-prompt') {
+    result.position = data.position
+  }
+
+  if (data.displayMode === 'full' || data.displayMode === 'compact') {
+    result.displayMode = data.displayMode
   }
 
   if (data.language === 'en' || data.language === 'zh') {
@@ -382,6 +396,26 @@ async function renderConfigPane($: EngineInterface, e: any): Promise<any> {
                 onPress: () => changeConfig($, latest => ({ ...latest, language: latest.language === 'en' ? 'zh' : 'en' })),
               }),
             ],
+          }),
+          Select({
+            key: 'statusline-position',
+            label: language === 'zh' ? '状态栏位置' : 'Statusline position',
+            value: current.position,
+            options: [
+              { value: 'session-mode', label: language === 'zh' ? '模式提示区域（现有位置）' : 'Mode area (existing position)' },
+              { value: 'below-prompt', label: language === 'zh' ? '输入框下方' : 'Below input box' },
+            ],
+            onSelect: (value: StatuslinePosition) => changeConfig($, latest => ({ ...latest, position: value })),
+          }),
+          Select({
+            key: 'statusline-display-mode',
+            label: language === 'zh' ? '状态栏显示模式' : 'Statusline display mode',
+            value: current.displayMode,
+            options: [
+              { value: 'full', label: language === 'zh' ? '完整模式' : 'Full' },
+              { value: 'compact', label: language === 'zh' ? '简洁模式' : 'Compact' },
+            ],
+            onSelect: (value: StatuslineDisplayMode) => changeConfig($, latest => ({ ...latest, displayMode: value })),
           }),
           Text({ color: UI_COLORS.gray, children: [language === 'zh' ? '模块：按钮可切换、↑/↓ 可排序' : 'Toggle modules or reorder them with the buttons'] }),
           ...moduleRows,
