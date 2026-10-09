@@ -2,6 +2,7 @@ import type {
   AgentInfo,
   EngineInterface,
   Register,
+  RenderInput,
   SessionUsage,
   TurnUsage,
 } from 'claude-code'
@@ -9,17 +10,18 @@ import type { StatuslineConfig, StatuslineModule } from '../types'
 
 const RESET = '\u001b[0m'
 const BOLD = '\u001b[1m'
+const DIM = '\u001b[2m'
 const GRAY = '\u001b[38;2;135;145;160m'
-const CYAN = '\u001b[38;2;80;200;255m'
-const BLUE = '\u001b[38;2;100;160;255m'
-const PURPLE = '\u001b[38;2;190;120;255m'
+const CYAN = '\u001b[38;2;78;201;176m'
+const BLUE = '\u001b[38;2;97;175;239m'
 const GREEN = '\u001b[38;2;80;220;140m'
 const YELLOW = '\u001b[38;2;255;215;0m'
 const RED = '\u001b[38;2;255;90;100m'
 
 const UI_COLORS = {
-  cyan: '#50c8ff',
-  blue: '#64a0ff',
+  cyan: '#4ec9b0',
+  blue: '#61afef',
+  pink: '#c678a4',
   purple: '#be78ff',
   green: '#50dc8c',
   yellow: '#ffd700',
@@ -31,6 +33,7 @@ export type UiSegment = {
   text: string
   color?: string
   bold?: boolean
+  dimColor?: boolean
 }
 
 const DEFAULT_ORDER = [
@@ -88,6 +91,8 @@ export type StatusSnapshot = {
 }
 
 export const DEFAULT_CONFIG: StatusConfig = {
+  position: 'session-mode',
+  displayMode: 'compact',
   language: 'en',
   order: [...DEFAULT_ORDER],
   modules: {
@@ -193,6 +198,8 @@ let snapshot: StatusSnapshot = {
 
 function cloneConfig(value: StatusConfig): StatusConfig {
   return {
+    position: value.position,
+    displayMode: value.displayMode,
     language: value.language,
     order: [...value.order],
     modules: { ...value.modules },
@@ -205,10 +212,20 @@ export function normalizeConfig(value: unknown): StatusConfig {
   if (!value || typeof value !== 'object') return result
 
   const data = value as {
+    position?: unknown
+    displayMode?: unknown
     language?: unknown
     order?: unknown
     modules?: unknown
     promptFrame?: unknown
+  }
+
+  if (data.position === 'session-mode' || data.position === 'below-prompt') {
+    result.position = data.position
+  }
+
+  if (data.displayMode === 'full' || data.displayMode === 'compact') {
+    result.displayMode = data.displayMode
   }
 
   if (data.language === 'en' || data.language === 'zh') {
@@ -290,19 +307,6 @@ function trimText(value: string, maxLength: number): string {
   return text.length > maxLength ? `${text.slice(0, maxLength - 3)}...` : text
 }
 
-function formatState(value: string, language: Language): string {
-  const key = value.toLowerCase()
-  const text = key === 'idle' || key === 'ready'
-    ? I18N[language].idle
-    : key === 'thinking'
-      ? I18N[language].thinking
-      : key === 'running' || key === 'working' || key === 'busy' || key === 'streaming' || key === 'tool_use'
-        ? I18N[language].running
-        : value || I18N[language].idle
-  const color = key === 'auth' ? YELLOW : key === 'idle' || key === 'ready' ? GRAY : CYAN
-  return `${color}${text}${RESET}`
-}
-
 function formatResetDuration(seconds: number | undefined): string {
   if (seconds === undefined || seconds <= 0) return ''
   const days = Math.floor(seconds / 86400)
@@ -327,12 +331,6 @@ function normalizeBucketLabel(kind: string, resetSeconds?: number): string {
     return '1m'
   }
   return kind || 'quota'
-}
-
-function remainingColor(percent: number): string {
-  if (percent >= 50) return GREEN
-  if (percent >= 20) return YELLOW
-  return RED
 }
 
 function resetSeconds(resetsAt: string | undefined): number | undefined {
@@ -363,13 +361,6 @@ function quotaValues(rateLimits: readonly RateLimit[]): QuotaValue[] {
   }
 
   return [...buckets.values()].sort((left, right) => (order[left.label] ?? 99) - (order[right.label] ?? 99))
-}
-
-function formatQuota(rateLimits: readonly RateLimit[]): string[] {
-  return quotaValues(rateLimits).map(value => {
-    const reset = value.reset ? ` · ${value.reset}` : ''
-    return `${remainingColor(value.remaining)}${value.label} ${value.remaining.toFixed(0)}%${reset}${RESET}`
-  })
 }
 
 export function formatSubagentLine(agent: SubagentSnapshot, language: Language): string {
@@ -419,13 +410,13 @@ function contextRing(percent: number): string {
   return '●'
 }
 
-function uiQuotaSegments(rateLimits: readonly RateLimit[]): UiSegment[] {
+function uiQuotaSegments(rateLimits: readonly RateLimit[], showIcons: boolean): UiSegment[] {
   const segments: UiSegment[] = []
   for (const [index, value] of quotaValues(rateLimits).entries()) {
-    if (index > 0) segments.push({ text: ' │ ', color: UI_COLORS.gray })
+    if (index > 0) segments.push({ text: ' | ', color: UI_COLORS.gray, dimColor: true })
     const reset = value.reset ? ` · ${value.reset}` : ''
     const color = value.remaining >= 50 ? UI_COLORS.green : value.remaining >= 20 ? UI_COLORS.yellow : UI_COLORS.red
-    segments.push({ text: `${value.label} ${value.remaining.toFixed(0)}%${reset}`, color })
+    segments.push({ text: `${showIcons ? '⏳ ' : ''}${value.label} ${value.remaining.toFixed(0)}%${reset}`, color })
   }
   return segments
 }
@@ -460,42 +451,52 @@ function uiSubagentSegments(agent: SubagentSnapshot, language: Language): UiSegm
   return segments
 }
 
-export function uiStatusRows(value: StatusSnapshot, currentConfig: StatusConfig): UiSegment[][] {
+export function uiStatusRows(value: StatusSnapshot, currentConfig: StatusConfig): [UiSegment[], ...UiSegment[][]] {
+  const showIcons = currentConfig.displayMode !== 'compact'
+  const icon = (value: string) => showIcons ? `${value} ` : ''
   const language = currentConfig.language
   const state = uiState(value.state, language)
   const contextPercent = value.contextPercent ?? 0
   const contextColorValue = contextPercent >= 85 ? UI_COLORS.red : contextPercent >= 65 ? UI_COLORS.yellow : UI_COLORS.green
   const moduleParts: Partial<Record<ModuleId, UiSegment[]>> = {
-    model: [{ text: value.model || 'Agent', color: UI_COLORS.cyan, bold: true }],
-    state: [{ text: state.text, color: state.color }],
-    env: value.env ? [{ text: value.env, color: UI_COLORS.purple }] : undefined,
-    git: value.gitBranch ? [{ text: `${value.gitBranch} ${value.gitDirty ? '●' : '✓'}`, color: value.gitDirty ? UI_COLORS.yellow : UI_COLORS.green }] : undefined,
+    model: [{ text: `${icon('🤖')}${value.model || 'Agent'}`, color: UI_COLORS.cyan, bold: true }],
+    state: [{ text: `${icon('🎯')}${state.text}`, color: state.color }],
+    env: value.env ? [{ text: `${icon('🧩')}${value.env}`, color: UI_COLORS.purple }] : undefined,
+    git: value.gitBranch ? [
+      { text: `${icon('🌿')}${value.gitBranch}`, color: UI_COLORS.blue },
+      { text: value.gitDirty ? ' ●' : ' ✓', color: value.gitDirty ? UI_COLORS.yellow : UI_COLORS.green },
+    ] : undefined,
     git_stat: value.gitInsertions > 0 || value.gitDeletions > 0
-      ? [{ text: value.gitInsertions > 0 ? `+${value.gitInsertions}` : '', color: UI_COLORS.green }, { text: value.gitInsertions > 0 && value.gitDeletions > 0 ? ' ' : '' }, { text: value.gitDeletions > 0 ? `-${value.gitDeletions}` : '', color: UI_COLORS.red }]
+      ? [
+          { text: icon('📝'), color: UI_COLORS.gray },
+          { text: value.gitInsertions > 0 ? `+${value.gitInsertions}` : '', color: UI_COLORS.green },
+          { text: value.gitInsertions > 0 && value.gitDeletions > 0 ? ' ' : '' },
+          { text: value.gitDeletions > 0 ? `-${value.gitDeletions}` : '', color: UI_COLORS.red },
+        ]
       : undefined,
-    context: [{ text: `${I18N[language].ctx} ${contextRing(contextPercent)} ${contextPercent.toFixed(0)}%`, color: contextColorValue }],
-    tokens: [{ text: `↑${formatTokenCount(value.inputTokens)} ↓${formatTokenCount(value.outputTokens)}${activeTurn ? '…' : ''}`, color: UI_COLORS.blue }],
+    context: [{ text: `${icon('🧠')}${I18N[language].ctx} ${contextRing(contextPercent)} ${contextPercent.toFixed(0)}%`, color: contextColorValue }],
+    tokens: [{ text: `${icon('🧮')}↑${formatTokenCount(value.inputTokens)} ↓${formatTokenCount(value.outputTokens)}`, color: UI_COLORS.pink }],
     cache: value.cacheReadTokens > 0
       ? (() => {
           const promptTokens = Math.max(value.inputTokens, value.inputTokens + value.cacheReadTokens, value.cacheReadTokens)
           const percent = promptTokens > 0 ? Math.round((value.cacheReadTokens / promptTokens) * 100) : 0
-          return [{ text: `⚡${I18N[language].cache} ${percent}% (${formatTokenCount(value.cacheReadTokens)})`, color: UI_COLORS.cyan }]
+          return [{ text: `${icon('💾')}${I18N[language].cache} ${percent}% (${formatTokenCount(value.cacheReadTokens)})`, color: UI_COLORS.cyan }]
         })()
       : undefined,
-    quota: uiQuotaSegments(value.rateLimits),
-    cost: value.costUsd !== undefined && Number.isFinite(value.costUsd) ? [{ text: `$${value.costUsd.toFixed(2)}`, color: UI_COLORS.green }] : undefined,
-    cwd: value.cwd ? [{ text: shortPath(value.cwd, value.home), color: UI_COLORS.gray }] : undefined,
+    quota: uiQuotaSegments(value.rateLimits, showIcons),
+    cost: value.costUsd !== undefined && Number.isFinite(value.costUsd) ? [{ text: `${icon('💰')}$${value.costUsd.toFixed(2)}`, color: UI_COLORS.green }] : undefined,
+    cwd: value.cwd ? [{ text: `${icon('📂')}${shortPath(value.cwd, value.home)}`, color: UI_COLORS.green }] : undefined,
   }
 
   const main: UiSegment[] = []
   for (const item of currentConfig.order) {
     const segments = currentConfig.modules[item] ? moduleParts[item] : undefined
     if (!segments || segments.length === 0) continue
-    if (main.length > 0) main.push({ text: ' │ ', color: UI_COLORS.gray })
+    if (main.length > 0) main.push({ text: ' | ', color: UI_COLORS.gray, dimColor: true })
     main.push(...segments)
   }
 
-  const rows = [main]
+  const rows: [UiSegment[], ...UiSegment[][]] = [main]
   rows.push(
     ...value.subagents
       .filter(agent => !FINISHED_AGENT_STATUSES.has(agent.status.toLowerCase()))
@@ -506,40 +507,13 @@ export function uiStatusRows(value: StatusSnapshot, currentConfig: StatusConfig)
 }
 
 export function formatStatusLine(value: StatusSnapshot, currentConfig = DEFAULT_CONFIG): string {
-  const language = currentConfig.language
-  const parts: Partial<Record<ModuleId, string>> = {
-    model: `${BOLD}${CYAN}${value.model || 'Agent'}${RESET}`,
-    state: formatState(value.state, language),
-    env: value.env ? `${PURPLE}${value.env}${RESET}` : undefined,
-    git: value.gitBranch
-      ? `${value.gitDirty ? YELLOW : GREEN}${value.gitBranch} ${value.gitDirty ? '●' : '✓'}${RESET}`
-      : undefined,
-    git_stat: value.gitInsertions > 0 || value.gitDeletions > 0
-      ? [
-          value.gitInsertions > 0 ? `${GREEN}+${value.gitInsertions}${RESET}` : '',
-          value.gitDeletions > 0 ? `${RED}-${value.gitDeletions}${RESET}` : '',
-        ].filter(Boolean).join(' ')
-      : undefined,
-    context: `${I18N[language].ctx} ${contextColor(value.contextPercent ?? 0)}${contextRing(value.contextPercent ?? 0)} ${contextColor(value.contextPercent ?? 0)}${(value.contextPercent ?? 0).toFixed(0)}%${RESET}`,
-    tokens: `${BLUE}↑${formatTokenCount(value.inputTokens)} ↓${formatTokenCount(value.outputTokens)}${activeTurn ? '…' : ''}${RESET}`,
-    cache: value.cacheReadTokens > 0
-      ? (() => {
-          const promptTokens = Math.max(value.inputTokens, value.inputTokens + value.cacheReadTokens, value.cacheReadTokens)
-          const percent = promptTokens > 0 ? Math.round((value.cacheReadTokens / promptTokens) * 100) : 0
-          return `${CYAN}⚡${I18N[language].cache} ${percent}% (${formatTokenCount(value.cacheReadTokens)})${RESET}`
-        })()
-      : undefined,
-    quota: formatQuota(value.rateLimits).join(' │ ') || undefined,
-    cost: value.costUsd !== undefined && Number.isFinite(value.costUsd)
-      ? `${GREEN}$${value.costUsd.toFixed(2)}${RESET}`
-      : undefined,
-    cwd: value.cwd ? `${GRAY}${shortPath(value.cwd, value.home)}${RESET}` : undefined,
-  }
-
-  return currentConfig.order
-    .filter(item => currentConfig.modules[item] && parts[item])
-    .map(item => parts[item])
-    .join(' │ ')
+  return uiStatusRows(value, currentConfig)[0].map(segment => {
+    if (!segment.text) return ''
+    const color = segment.color
+      ? `\u001b[38;2;${segment.color.slice(1).match(/.{2}/gu)!.map(channel => Number.parseInt(channel, 16)).join(';')}m`
+      : ''
+    return `${segment.bold ? BOLD : ''}${segment.dimColor ? DIM : ''}${color}${segment.text}${RESET}`
+  }).join('')
 }
 
 export function stripAnsi(value: string): string {
@@ -728,29 +702,46 @@ async function refreshLiveData($: EngineInterface): Promise<void> {
   snapshot = { ...snapshot, env }
 }
 
+function renderStatusRow($: EngineInterface, e: RenderInput<'SessionMode' | 'PromptHint'>) {
+  const { Text } = $.ui.resolve(e)
+  const row = uiStatusRows(snapshot, config)[0] ?? []
+  return Text({
+    wrap: 'wrap',
+    children: row.map(segment => Text({
+      wrap: 'wrap',
+      color: segment.color,
+      bold: segment.bold,
+      dimColor: segment.dimColor,
+      children: [segment.text],
+    })),
+  })
+}
+
 export const register: Register = on => {
-  on('ui.render', { component: 'PromptHint' }, ($, e) => {
-    const { Text } = $.ui.resolve(e)
+  on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
+    const { Box, Text } = $.ui.resolve(e)
+    if (config.position === 'below-prompt') {
+      const hint = await next(e)
+      return Box({
+        flexDirection: 'column',
+        children: [hint, renderStatusRow($, e)],
+      })
+    }
     return Text({ children: [''] })
   })
 
-  on('ui.render', { component: 'SessionMode' }, ($, e) => {
-    const { Box, Text } = $.ui.resolve(e)
+  on('ui.render', { component: 'SessionMode' }, ($, e, next) => {
+    if (config.position !== 'session-mode') return next(e)
+    const { Text } = $.ui.resolve(e)
+    // 用显式换行分隔模式提示和状态栏，不依赖容器的纵向布局。
     const modeText = e.props.modes.length > 0
-      ? `⏵⏵ ${e.props.modes.join(' & ')} ·`
+      ? `⏵⏵ ${e.props.modes.join(' & ')}\n`
       : ''
-    const row = uiStatusRows(snapshot, config)[0] ?? []
-    return Box({
-      flexDirection: 'column',
+    return Text({
+      wrap: 'wrap',
       children: [
-        Text({ dimColor: true, children: [modeText] }),
-        Box({
-          children: row.map(segment => Text({
-            color: segment.color,
-            bold: segment.bold,
-            children: [segment.text],
-          })),
-        }),
+        ...(modeText ? [Text({ wrap: 'wrap', dimColor: true, children: [modeText] })] : []),
+        renderStatusRow($, e),
       ],
     })
   })

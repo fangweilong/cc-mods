@@ -17,7 +17,7 @@ function mockConfig(on: On) {
     toasts: [] as string[], opened: [] as string[], paths: [] as string[],
     file: JSON.stringify(DEFAULT_CONFIG),
   }
-  mock.env(on, { HOME: 'D:/test-home' })
+  mock.env(on, { HOME: '/test-home' })
   on('fs.read', () => ({ value: world.file }))
   on('fs.write', ($, e) => {
     if (world.failFile) return { deny: 'disk write refused' }
@@ -102,6 +102,22 @@ for (const surface of ['terminal', 'desktop'] as const) {
       }
       expect((await ui.find({ key: 'config-actions' }))?.props.marginTop).toBe(1)
       expect(await ui.find({ key: 'panel-language' })).toBeDefined()
+      const position = await ui.find({ key: 'statusline-position' })
+      expect(position?.type).toBe('Select')
+      expect(position?.props.value).toBe('session-mode')
+      expect(position?.props.label).toBe(language === 'zh' ? '状态栏位置' : 'Statusline position')
+      expect(position?.props.options).toEqual([
+        { value: 'session-mode', label: language === 'zh' ? '模式提示区域（现有位置）' : 'Mode area (existing position)' },
+        { value: 'below-prompt', label: language === 'zh' ? '输入框下方' : 'Below input box' },
+      ])
+      const displayMode = await ui.find({ key: 'statusline-display-mode' })
+      expect(displayMode?.type).toBe('Select')
+      expect(displayMode?.props.value).toBe('compact')
+      expect(displayMode?.props.label).toBe(language === 'zh' ? '状态栏显示模式' : 'Statusline display mode')
+      expect(displayMode?.props.options).toEqual([
+        { value: 'full', label: language === 'zh' ? '完整模式' : 'Full' },
+        { value: 'compact', label: language === 'zh' ? '简洁模式' : 'Compact' },
+      ])
       expect(await ui.find({ key: 'module-model-toggle' })).toBeDefined()
       expect(await ui.find({ key: 'prompt-frame-title' })).toBeDefined()
       expect(await ui.find({ key: 'i18n-language-source' })).toBeDefined()
@@ -110,6 +126,99 @@ for (const surface of ['terminal', 'desktop'] as const) {
       await ui.unmount()
     })
   }
+}
+
+test('normalizes statusline positions independently and defaults legacy files to the existing slot', () => {
+  for (const position of ['session-mode', 'below-prompt'] as const) {
+    expect(normalizeConfig({ position }).position).toBe(position)
+  }
+  for (const value of [undefined, null, {}, { position: 'unknown' }, { position: 1 }, { position: null }]) {
+    expect(normalizeConfig(value).position).toBe('session-mode')
+  }
+})
+
+for (const surface of ['terminal', 'desktop'] as const) {
+  test(`stages, saves and reopens statusline position without a feature mod on ${surface}`, async ($, on) => {
+    const world = mockConfig(on)
+    world.loaded = false
+    await openConfig($)
+    const ui = await mountConfig($, surface)
+    await ui.input({ key: 'prompt-frame-title', text: '保留输入框配置', kind: 'change' })
+    await ui.select({ key: 'statusline-position', value: 'below-prompt' })
+    await ui.press({ key: 'panel-language' })
+    expect((await ui.find({ key: 'statusline-position' }))?.props.value).toBe('below-prompt')
+    expect(world.writes).toEqual([])
+    await ui.press({ key: 'save-config' })
+    const saved = JSON.parse(world.writes[0]!)
+    expect(saved.position).toBe('below-prompt')
+    expect(saved.language).toBe('zh')
+    expect(saved.promptFrame.title).toBe('保留输入框配置')
+    await ui.unmount()
+    await openConfig($)
+    const reopened = await mountConfig($, surface)
+    expect((await reopened.find({ key: 'statusline-position' }))?.props.value).toBe('below-prompt')
+    await reopened.select({ key: 'statusline-position', value: 'session-mode' })
+    await reopened.press({ key: 'save-config' })
+    expect(JSON.parse(world.writes[1]!).position).toBe('session-mode')
+    expect(world.changes).toEqual([])
+    await reopened.unmount()
+  })
+}
+
+test('normalizes display modes independently and defaults legacy or invalid values to compact', () => {
+  expect(DEFAULT_CONFIG.displayMode).toBe('compact')
+  for (const displayMode of ['full', 'compact'] as const) {
+    expect(normalizeConfig({ displayMode }).displayMode).toBe(displayMode)
+  }
+  for (const value of [
+    undefined, null, {}, { language: 'zh' }, { displayMode: 'unknown' },
+    { displayMode: 'FULL' }, { displayMode: '' }, { displayMode: 1 },
+    { displayMode: null }, { displayMode: false }, { displayMode: [] }, { displayMode: {} },
+  ]) {
+    expect(normalizeConfig(value).displayMode).toBe('compact')
+  }
+})
+
+for (const surface of ['terminal', 'desktop'] as const) {
+  test(`stages, saves and reopens display mode without a feature mod on ${surface}`, async ($, on) => {
+    const world = mockConfig(on)
+    world.loaded = false
+    world.file = JSON.stringify({ language: 'en', modules: { context: false }, promptFrame: { title: '既有输入框' } })
+    await openConfig($)
+    const ui = await mountConfig($, surface)
+    expect((await ui.find({ key: 'statusline-display-mode' }))?.props.value).toBe('compact')
+    await ui.select({ key: 'statusline-display-mode', value: 'full' })
+    await ui.select({ key: 'statusline-position', value: 'below-prompt' })
+    await ui.press({ key: 'panel-language' })
+    expect((await ui.find({ key: 'statusline-display-mode' }))?.props.value).toBe('full')
+    expect(world.writes).toEqual([])
+    expect(JSON.parse(world.file).displayMode).toBeUndefined()
+    await ui.press({ key: 'save-config' })
+    const saved = JSON.parse(world.writes[0]!)
+    expect(saved.displayMode).toBe('full')
+    expect(saved.position).toBe('below-prompt')
+    expect(saved.language).toBe('zh')
+    expect(saved.modules.context).toBe(false)
+    expect(saved.promptFrame.title).toBe('既有输入框')
+    expect(saved.order).toEqual(DEFAULT_CONFIG.order)
+    await ui.unmount()
+    await openConfig($)
+    const reopened = await mountConfig($, surface)
+    expect((await reopened.find({ key: 'statusline-display-mode' }))?.props.value).toBe('full')
+    await reopened.select({ key: 'statusline-display-mode', value: 'compact' })
+    await reopened.press({ key: 'save-config' })
+    const restored = JSON.parse(world.writes[1]!)
+    expect(restored.displayMode).toBe('compact')
+    expect(restored.position).toBe('below-prompt')
+    expect(restored.modules.context).toBe(false)
+    expect(restored.promptFrame.title).toBe('既有输入框')
+    expect(world.changes).toEqual([])
+    await reopened.unmount()
+    await openConfig($)
+    const compactMode = await mountConfig($, surface)
+    expect((await compactMode.find({ key: 'statusline-display-mode' }))?.props.value).toBe('compact')
+    await compactMode.unmount()
+  })
 }
 
 test('opens the visual pane using /my-cc-mods-config', async ($, on) => {
@@ -289,7 +398,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
       const selector = await ui.find({ key: 'i18n-language-preset' })
       expect(selector?.type).toBe('Select')
       expect(selector?.props.value).toBe(value)
-      expect((await ui.findAll({ type: 'Select' })).length).toBe(1)
+      expect((await ui.findAll({ type: 'Select' })).length).toBe(3)
       expect((await ui.find({ key: 'i18n-language-source' }))?.props.value).toBe(value)
       expect(world.changes).toEqual([])
       expect(world.writes).toEqual([])
@@ -360,51 +469,65 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(saved.language).toBe('zh')
     expect(saved.modules.context).toBe(false)
     expect(saved.order.slice(-2)).toEqual(['cwd', 'cost'])
-    expect(world.paths.map(path => path.replace(/\\/gu, '/'))).toEqual(['D:/test-home/.config/my-cc-mods/config.json'])
+    expect(world.paths.map(path => path.replace(/\\/gu, '/'))).toEqual(['/test-home/.config/my-cc-mods/config.json'])
     expect(world.changes).toEqual([])
     await ui.unmount()
   })
 }
 
-test('reads existing legacy configuration and discards every unsaved field on close', async ($, on) => {
-  const world = mockConfig(on)
-  world.file = JSON.stringify({ ...DEFAULT_CONFIG, language: 'zh', promptFrame: { ...DEFAULT_CONFIG.promptFrame, title: '已有标题' } })
-  await openConfig($)
-  const ui = await mountConfig($)
-  expect((await ui.find({ key: 'prompt-frame-title' }))?.props.value).toBe('已有标题')
-  await ui.input({ key: 'prompt-frame-title', text: '未保存标题', kind: 'change' })
-  await ui.press({ key: 'panel-language' })
-  await ui.press({ key: 'module-context-toggle' })
-  await ui.press({ key: 'close-config' })
-  await ui.unmount()
-  await openConfig($)
-  const reopened = await mountConfig($)
-  expect((await reopened.find({ key: 'prompt-frame-title' }))?.props.value).toBe('已有标题')
-  expect((await reopened.find({ key: 'panel-language' }))?.text).toBe('语言：中文')
-  expect((await reopened.find({ key: 'module-context-toggle' }))?.text).toBe('启用')
-  expect(world.writes).toEqual([])
-  await reopened.unmount()
-})
+for (const surface of ['terminal', 'desktop'] as const) {
+  test(`reads existing legacy configuration and discards every unsaved field on close on ${surface}`, async ($, on) => {
+    const world = mockConfig(on)
+    world.file = JSON.stringify({ language: 'zh', promptFrame: { title: '已有标题' } })
+    await openConfig($)
+    const ui = await mountConfig($, surface)
+    expect((await ui.find({ key: 'prompt-frame-title' }))?.props.value).toBe('已有标题')
+    expect((await ui.find({ key: 'statusline-display-mode' }))?.props.value).toBe('compact')
+    await ui.input({ key: 'prompt-frame-title', text: '未保存标题', kind: 'change' })
+    await ui.select({ key: 'statusline-position', value: 'below-prompt' })
+    await ui.select({ key: 'statusline-display-mode', value: 'full' })
+    await ui.press({ key: 'panel-language' })
+    await ui.press({ key: 'module-context-toggle' })
+    await ui.press({ key: 'close-config' })
+    await ui.unmount()
+    await openConfig($)
+    const reopened = await mountConfig($, surface)
+    expect((await reopened.find({ key: 'statusline-position' }))?.props.value).toBe('session-mode')
+    expect((await reopened.find({ key: 'statusline-display-mode' }))?.props.value).toBe('compact')
+    expect((await reopened.find({ key: 'prompt-frame-title' }))?.props.value).toBe('已有标题')
+    expect((await reopened.find({ key: 'panel-language' }))?.text).toBe('语言：中文')
+    expect((await reopened.find({ key: 'module-context-toggle' }))?.text).toBe('启用')
+    expect(world.writes).toEqual([])
+    await reopened.unmount()
+  })
 
-test('preserves all configuration drafts on a failed file save for retry', async ($, on) => {
-  const world = mockConfig(on)
-  world.loaded = false
-  world.failFile = true
-  await openConfig($)
-  const ui = await mountConfig($)
-  await ui.input({ key: 'prompt-frame-color', text: 'green', kind: 'change' })
-  await ui.press({ key: 'module-model-toggle' })
-  await ui.press({ key: 'save-config' })
-  expect(world.writes).toEqual([])
-  expect((await ui.find({ key: 'prompt-frame-color' }))?.props.value).toBe('green')
-  expect(world.toasts).toContain('Configuration save failed; draft preserved.')
-  world.failFile = false
-  await ui.press({ key: 'save-config' })
-  const saved = JSON.parse(world.writes[0]!)
-  expect(saved.promptFrame.color).toBe('green')
-  expect(saved.modules.model).toBe(false)
-  await ui.unmount()
-})
+  test(`preserves all configuration drafts on a failed file save for retry on ${surface}`, async ($, on) => {
+    const world = mockConfig(on)
+    world.loaded = false
+    world.failFile = true
+    await openConfig($)
+    const ui = await mountConfig($, surface)
+    await ui.input({ key: 'prompt-frame-color', text: 'green', kind: 'change' })
+    await ui.select({ key: 'statusline-position', value: 'below-prompt' })
+    await ui.select({ key: 'statusline-display-mode', value: 'full' })
+    await ui.press({ key: 'module-model-toggle' })
+    await ui.press({ key: 'save-config' })
+    expect(world.writes).toEqual([])
+    expect(JSON.parse(world.file).displayMode).toBe('compact')
+    expect((await ui.find({ key: 'prompt-frame-color' }))?.props.value).toBe('green')
+    expect((await ui.find({ key: 'statusline-position' }))?.props.value).toBe('below-prompt')
+    expect((await ui.find({ key: 'statusline-display-mode' }))?.props.value).toBe('full')
+    expect(world.toasts).toContain('Configuration save failed; draft preserved.')
+    world.failFile = false
+    await ui.press({ key: 'save-config' })
+    const saved = JSON.parse(world.writes[0]!)
+    expect(saved.position).toBe('below-prompt')
+    expect(saved.displayMode).toBe('full')
+    expect(saved.promptFrame.color).toBe('green')
+    expect(saved.modules.model).toBe(false)
+    await ui.unmount()
+  })
+}
 
 test('registers only my-cc-mods-config without any feature mod at session start', async ($, on) => {
   const names: string[] = []
@@ -422,6 +545,7 @@ test('normalizes the legacy format independently of the statusline implementatio
     language: 'zh', order: ['cwd', 'model'], modules: { context: false }, promptFrame: { title: '兼容配置' },
   })
   expect(current.language).toBe('zh')
+  expect(current.displayMode).toBe('compact')
   expect(current.order.slice(0, 3)).toEqual(['cwd', 'model', 'state'])
   expect(current.order).toHaveLength(DEFAULT_CONFIG.order.length)
   expect(current.modules.context).toBe(false)

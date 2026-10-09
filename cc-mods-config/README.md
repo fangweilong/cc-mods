@@ -23,6 +23,8 @@ claude --plugin-dir "./cc-mods-config" --plugin-dir "./user-prompt-frame"
 运行 `/my-cc-mods-config` 会打开统一可视化配置面板，这是唯一的配置面板命令入口：
 
 - 切换 `en` / `zh`
+- 选择状态栏位置：模式提示区域（现有位置）/ 输入框下方
+- 选择状态栏显示模式：完整模式（保留模块前缀 Emoji）/ 简洁模式（默认，仅移除模块前缀 Emoji，保留数据指示符号、颜色和模块内容）
 - 启用/停用模块
 - 调整模块顺序
 - 编辑用户输入框标题、颜色和边框符号
@@ -44,7 +46,7 @@ Subagent 面板当前没有可调配置。后续新增可调项也应统一接�
 
 ## 存储与职责
 
-- 状态栏与输入框继续使用 `~/.config/my-cc-mods/config.json`，保留 `language`、`order`、`modules`、`promptFrame` 格式，无需迁移。
+- 状态栏与输入框继续使用 `~/.config/my-cc-mods/config.json`，保留 `language`、`order`、`modules`、`promptFrame` 格式，新增 `position`（`session-mode` / `below-prompt`）与 `displayMode`（`full` / `compact`）；旧配置缺少位置字段时沿用现有位置，缺少显示模式或值无效时使用简洁模式（`compact`），无需迁移。
 - i18n 继续通过宿主 `userConfig` 保存 `i18n-mod.language`，不直接写 `settings.json`，也不向上述 JSON 复制语言来源。
 - 面板的草稿与错误状态归属 `cc-mods-config`，不访问其他 Mod 的 `$.state`。
 - 不绘制状态栏、不隐藏原生快捷提示、不订阅模型或 Agent 的运行事件。
@@ -62,7 +64,7 @@ claude plugin validate ./cc-mods-config
 claude plugin test ./cc-mods-config
 ```
 
-测试覆盖 terminal/desktop 面板、中英文 Mod 分组标题与间隔、唯一命令注册与已移除入口不再打开面板、无功能 Mod 时独立保存、兼容文件读取、草稿取消、i18n 校验和锁定策略、部分保存失败与重试。
+测试覆盖 terminal/desktop 面板、中英文 Mod 分组标题与间隔、状态栏位置和完整/简洁模式选择/保存/重新打开及旧配置默认值、模式无效值回退、唯一命令注册与已移除入口不再打开面板、无功能 Mod 时独立保存、兼容文件读取、草稿取消、i18n 校验和锁定策略、部分保存失败与重试。
 
 类型声明由 Claude Code 在加载后生成到 `.claude-plugin/types/`，无需安装 npm 依赖。
 
