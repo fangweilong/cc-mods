@@ -25,7 +25,7 @@ export type StatusConfig = StatuslineConfig
 
 export const DEFAULT_CONFIG: StatusConfig = {
   position: 'session-mode',
-  displayMode: 'full',
+  displayMode: 'compact',
   language: 'en',
   order: [...DEFAULT_ORDER],
   modules: {

@@ -13,8 +13,8 @@
 
 主状态行支持两种显示模式，以低亮度 ` | ` 分隔各模块：
 
-- 完整模式 `full`（默认）：每个模块统一使用 Emoji 作为栏目图标，不混用单色字符图标。
-- 简洁模式 `compact`：去掉各模块前面的 Emoji 图标及其空格，保留文字、配色和所有数据；分支圆点/勾号、增删符号、上下文圆环与 Token 箭头不受影响。不会删除模型名、分支名或路径内容中自带的 Emoji，也不改变 Subagent 行。
+- 完整模式 `full`：每个模块统一使用 Emoji 作为栏目图标，不混用单色字符图标。
+- 简洁模式 `compact`（默认）：去掉各模块前面的 Emoji 图标及其空格，保留文字、配色和所有数据；分支圆点/勾号、增删符号、上下文圆环与 Token 箭头不受影响。不会删除模型名、分支名或路径内容中自带的 Emoji，也不改变 Subagent 行。
 
 两种模式保留 Python 版本兼容的模块、配置顺序与开关，不添加背景色，也不要求 Nerd Font；原生 UI 与 ANSI 格式化输出使用相同的文本和配色。以下图标说明对应完整模式。
 
@@ -57,7 +57,7 @@ Mod 读取与 Python 版本相同的配置文件：
 ```json
 {
   "position": "session-mode",
-  "displayMode": "full",
+  "displayMode": "compact",
   "language": "en",
   "order": [
     "model",
@@ -101,7 +101,7 @@ Mod 读取与 Python 版本相同的配置文件：
 支持：
 
 - `position`: `session-mode`（现有位置，默认）/ `below-prompt`（输入框下方）；缺少或无效时沿用现有位置
-- `displayMode`: `full`（完整模式，默认）/ `compact`（简洁模式，无前缀图标）；缺少或无效时使用完整模式
+- `displayMode`: `full`（完整模式，带前缀图标）/ `compact`（简洁模式，默认，无前缀图标）；缺少或无效时使用简洁模式
 - `language`: `en` / `zh`
 - `order`: 模块排序，缺失模块自动按默认顺序补齐
 - `modules`: 各模块启用/停用

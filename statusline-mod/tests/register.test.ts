@@ -39,7 +39,9 @@ test('formats all configured main modules with icons and colors', () => {
     subagents: [],
   }
 
-  expect(stripAnsi(formatStatusLine(snapshot))).toBe(
+  const full = normalizeConfig({ displayMode: 'full' })
+
+  expect(stripAnsi(formatStatusLine(snapshot, full))).toBe(
     '🤖 claude-opus-5 | 🎯 Running | 🧩 (.venv) | 🌿 main ● | 📝 +42 -12 | 🧠 ctx ◕ 62% | 🧮 ↑12.0k ↓5.2k | 💾 cache 20% (3.0k) | ⏳ 5h 83% | 💰 $1.25 | 📂 …/other/cc-mods/statusline-mod',
   )
 
@@ -63,7 +65,7 @@ test('builds native UI segments without ANSI escape characters or plugin labels'
     gitInsertions: 0,
     gitDeletions: 0,
     subagents: [],
-  }, DEFAULT_CONFIG)
+  }, normalizeConfig({ displayMode: 'full' }))
   const text = rows.flat().map(segment => segment.text).join('')
 
   expect(text).toContain('gpt-6-sol')
@@ -92,6 +94,7 @@ test('gives every populated main module an emoji icon', () => {
   }
   for (const [module, icon] of Object.entries(icons)) {
     const config = normalizeConfig({
+      displayMode: 'full',
       modules: Object.fromEntries(DEFAULT_CONFIG.order.map(item => [item, item === module])),
     })
     const text = uiStatusRows(snapshot, config)[0].map(segment => segment.text).join('')
@@ -130,8 +133,8 @@ test('only hides decorative prefixes without stripping icons from actual values 
     ...compactSnapshot, model: '🤖 Custom', env: '🧩 node', gitBranch: 'feature/🌿', cwd: '/work/📂project',
     subagents: [{ id: 'worker', description: '🧠 Inspect', name: '🤖 Worker', type: 'general-purpose', status: 'running', inputTokens: 0, outputTokens: 0 }],
   }
-  const full = uiStatusRows(snapshot, DEFAULT_CONFIG)
-  const compact = uiStatusRows(snapshot, normalizeConfig({ displayMode: 'compact' }))
+  const full = uiStatusRows(snapshot, normalizeConfig({ displayMode: 'full' }))
+  const compact = uiStatusRows(snapshot, DEFAULT_CONFIG)
   const text = compact[0].map(segment => segment.text).join('')
   expect(text).toContain('🤖 Custom | Idle | 🧩 node | feature/🌿 ●')
   expect(text).toContain('/work/📂project')
@@ -153,7 +156,7 @@ test('formats insertion-only or deletion-only changes without leftover icon spac
 
 test('keeps branch text blue and colors its dirty or clean marker independently', () => {
   for (const gitDirty of [true, false]) {
-    const rows = uiStatusRows({ ...compactSnapshot, gitDirty }, DEFAULT_CONFIG)
+    const rows = uiStatusRows({ ...compactSnapshot, gitDirty }, normalizeConfig({ displayMode: 'full' }))
     expect(rows[0]).toContainEqual({ text: '🌿 feat/statusline-mod', color: '#61afef' })
     expect(rows[0]).toContainEqual({ text: gitDirty ? ' ●' : ' ✓', color: gitDirty ? '#ffd700' : '#50dc8c' })
   }
@@ -161,6 +164,7 @@ test('keeps branch text blue and colors its dirty or clean marker independently'
 
 test('preserves custom module order and hides disabled or unavailable fields without extra separators', () => {
   const config = normalizeConfig({
+    displayMode: 'full',
     order: ['model', 'cwd', 'git', 'tokens'],
     modules: { state: false, env: false, git_stat: false, context: false, cache: false, quota: false, cost: false },
   })
@@ -217,15 +221,16 @@ for (const surface of ['terminal', 'desktop'] as const) {
     })
 
     expect(await ui.find({ type: 'Text', text: /⏵⏵ accept edits on\n/ })).toBeDefined()
-    const model = await ui.find({ type: 'Text', text: /^🤖 Agent$/ })
+    const model = await ui.find({ type: 'Text', text: /^Agent$/ })
     const dividers = await ui.findAll({ type: 'Text', text: /^ \| $/ })
     expect(model?.props.color).toBe('#4ec9b0')
     expect(model?.props.bold).toBe(true)
     expect(dividers.length).toBeGreaterThan(0)
     expect(dividers.every(divider => divider.props.dimColor === true)).toBe(true)
-    expect(await ui.find({ type: 'Text', text: /^🧮 ↑0 ↓0$/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^🎯 Idle$/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^🧠 ctx ◯ 0%$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^↑0 ↓0$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^Idle$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^ctx ◯ 0%$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /🤖/ })).toBeUndefined()
     expect(await ui.find({ type: 'Text', text: /\u001b\[/ })).toBeUndefined()
     await ui.unmount()
   })
@@ -267,12 +272,13 @@ test('normalizes statusline positions and keeps the legacy position as the defau
   }
 })
 
-test('normalizes display modes and defaults legacy or invalid settings to full', () => {
+test('normalizes display modes and defaults legacy or invalid settings to compact', () => {
+  expect(DEFAULT_CONFIG.displayMode).toBe('compact')
   for (const displayMode of ['full', 'compact'] as const) {
     expect(normalizeConfig({ displayMode }).displayMode).toBe(displayMode)
   }
   for (const value of [undefined, null, {}, { language: 'zh' }, { displayMode: 'unknown' }, { displayMode: 1 }, { displayMode: null }, { displayMode: false }]) {
-    expect(normalizeConfig(value).displayMode).toBe('full')
+    expect(normalizeConfig(value).displayMode).toBe('compact')
   }
 })
 
@@ -385,7 +391,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
 
     test(`keeps complete token text and wrapping enabled in ${position} on ${surface}`, async ($, on) => {
       const world = mockStatusSession(on)
-      world.file = JSON.stringify({ ...DEFAULT_CONFIG, position })
+      world.file = JSON.stringify({ ...DEFAULT_CONFIG, position, displayMode: 'full' })
       on('turn.start', ($, e) => ({ turnId: e.turnId }))
       on('turn.complete', ($, e) => ({ text: e.answer }))
       await $.session.start({ cwd: 'D:/project', surface, isInteractive: true })
