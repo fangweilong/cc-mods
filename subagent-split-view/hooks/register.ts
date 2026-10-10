@@ -125,14 +125,22 @@ function setActivity(agentId: string, activity: string): void {
   if (panel) panel.activity = clipText(activity, 80)
 }
 
-async function refreshAgents($: EngineInterface): Promise<void> {
+async function refreshAgents($: EngineInterface, pruneMissing = false): Promise<void> {
   try {
     const agents = await $.agent.list()
+    const listedAgentIds = new Set<string>()
     for (const info of agents) {
+      listedAgentIds.add(info.id)
       if (isFinishedAgentStatus(info.status)) {
         panels.delete(info.id)
       } else {
         ensurePanel(info)
+      }
+    }
+
+    if (pruneMissing) {
+      for (const agentId of panels.keys()) {
+        if (!listedAgentIds.has(agentId)) panels.delete(agentId)
       }
     }
   } catch {
@@ -288,7 +296,7 @@ export const register: Register = on => {
       setActivity(result.agentId, 'starting turn')
       await openPane($)
     }
-    await refreshAgents($)
+    await refreshAgents($, false)
     invalidate($)
     return result
   })
@@ -351,8 +359,8 @@ export const register: Register = on => {
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
     if (e.agentId) {
-      await refreshAgents($)
-      if (e.reason !== 'answer') panels.delete(e.agentId)
+      await refreshAgents($, true)
+      panels.delete(e.agentId)
       await closePaneIfEmpty($)
       invalidate($)
     }
