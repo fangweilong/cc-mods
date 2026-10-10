@@ -1,0 +1,9 @@
+{
+  "name": "timestamp-mod",
+  "version": "0.1.0",
+  "author": {
+    "name": "teler"
+  },
+  "description": "Display formatted timestamps for user messages and tool calls.",
+  "types": "./types/index.d.ts"
+}

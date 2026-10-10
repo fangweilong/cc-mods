@@ -90,6 +90,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
         ['statusline', language === 'zh' ? 'statusline-mod · 状态栏' : 'statusline-mod · Statusline'],
         ['prompt-frame', language === 'zh' ? 'user-prompt-frame · 用户输入框' : 'user-prompt-frame · User prompt frame'],
         ['i18n', language === 'zh' ? 'i18n-mod · 原生界面语言' : 'i18n-mod · Native UI language'],
+        ['timestamp', language === 'zh' ? 'timestamp-mod · 时间显示' : 'timestamp-mod · Timestamps'],
         ['subagent', language === 'zh' ? 'subagent-split-view · Subagent 面板' : 'subagent-split-view · Subagent pane'],
       ] as const
       for (const [key, heading] of sections) {
@@ -120,6 +121,8 @@ for (const surface of ['terminal', 'desktop'] as const) {
       ])
       expect(await ui.find({ key: 'module-model-toggle' })).toBeDefined()
       expect(await ui.find({ key: 'prompt-frame-title' })).toBeDefined()
+      expect(await ui.find({ key: 'timestamp-enabled-toggle' })).toBeDefined()
+      expect((await ui.find({ key: 'timestamp-format' }))?.props.value).toBe('HH:mm:ss')
       expect(await ui.find({ key: 'i18n-language-source' })).toBeDefined()
       expect(world.changes).toEqual([])
       expect(world.writes).toEqual([])
@@ -127,6 +130,17 @@ for (const surface of ['terminal', 'desktop'] as const) {
     })
   }
 }
+
+test('normalizes timestamp settings and defaults legacy files', () => {
+  expect(DEFAULT_CONFIG.timestamp).toEqual({ enabled: true, format: 'HH:mm:ss' })
+  expect(normalizeConfig({ timestamp: { enabled: false, format: 'YYYY-MM-DD HH:mm' } }).timestamp).toEqual({
+    enabled: false,
+    format: 'YYYY-MM-DD HH:mm',
+  })
+  expect(normalizeConfig({ timestamp: { enabled: 'false', format: '' } }).timestamp).toEqual(DEFAULT_CONFIG.timestamp)
+  expect(normalizeConfig({}).timestamp).toEqual(DEFAULT_CONFIG.timestamp)
+})
+
 
 test('normalizes statusline positions independently and defaults legacy files to the existing slot', () => {
   for (const position of ['session-mode', 'below-prompt'] as const) {
@@ -469,7 +483,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(saved.language).toBe('zh')
     expect(saved.modules.context).toBe(false)
     expect(saved.order.slice(-2)).toEqual(['cwd', 'cost'])
-    expect(world.paths.map(path => path.replace(/\\/gu, '/'))).toEqual(['/test-home/.config/my-cc-mods/config.json'])
+    expect(world.paths.map(path => path.replace(/\\/gu, '/').replace(/^D:/u, ''))).toEqual(['/test-home/.config/my-cc-mods/config.json'])
     expect(world.changes).toEqual([])
     await ui.unmount()
   })

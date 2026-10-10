@@ -28,11 +28,12 @@ claude --plugin-dir "./cc-mods-config" --plugin-dir "./user-prompt-frame"
 - 启用/停用模块
 - 调整模块顺序
 - 编辑用户输入框标题、颜色和边框符号
+- 配置时间显示 Mod：启用/停用，以及时间格式规则
 - 配置原生界面语言（i18n）：语言代码或 JSON 路径、简体中文/English 原生语言选择器
 - 重新加载已保存的 JSON 语言包，或单独取消语言修改
 - 关闭面板
 
-配置按 `statusline-mod`、`user-prompt-frame`、`i18n-mod` 和 `subagent-split-view` 分组，标题标明 Mod 名称与配置能力；各组之间留一行间隔，底部保存/关闭操作区也单独留出间隔。Subagent 分组仅提示当前没有可调配置。
+配置按 `statusline-mod`、`timestamp-mod`、`user-prompt-frame`、`i18n-mod` 和 `subagent-split-view` 分组，标题标明 Mod 名称与配置能力；各组之间留一行间隔，底部保存/关闭操作区也单独留出间隔。Subagent 分组仅提示当前没有可调配置。
 
 语言选择改为单个原生 `Select` 控件，不再横排两个语言按钮。控件聚焦后使用方向键选择、Enter 确认，Tab 切换到其他控件；自定义语言代码和 JSON 路径仍通过输入框编辑。
 
@@ -46,14 +47,14 @@ Subagent 面板当前没有可调配置。后续新增可调项也应统一接�
 
 ## 存储与职责
 
-- 状态栏与输入框继续使用 `~/.config/my-cc-mods/config.json`，保留 `language`、`order`、`modules`、`promptFrame` 格式，新增 `position`（`session-mode` / `below-prompt`）与 `displayMode`（`full` / `compact`）；旧配置缺少位置字段时沿用现有位置，缺少显示模式或值无效时使用简洁模式（`compact`），无需迁移。
+- 状态栏与输入框继续使用 `~/.config/my-cc-mods/config.json`，保留 `language`、`order`、`modules`、`promptFrame` 格式，新增 `position`（`session-mode` / `below-prompt`）与 `displayMode`（`full` / `compact`）；时间显示使用 `timestamp.enabled` 与 `timestamp.format`；旧配置缺少位置字段时沿用现有位置，缺少显示模式或值无效时使用简洁模式（`compact`），缺少时间配置时启用 `HH:mm:ss`，无需迁移。
 - i18n 继续通过宿主 `userConfig` 保存 `i18n-mod.language`，不直接写 `settings.json`，也不向上述 JSON 复制语言来源。
 - 面板的草稿与错误状态归属 `cc-mods-config`，不访问其他 Mod 的 `$.state`。
 - 不绘制状态栏、不隐藏原生快捷提示、不订阅模型或 Agent 的运行事件。
-- 状态栏与输入框的配置即使未加载对应 Mod 也可预先保存；i18n 配置需加载 `i18n-mod` 才可使用，宿主锁定时显示只读。
-- 各功能 Mod 独立读取自己的设置，不通过配置插件的运行时状态获取设置。状态栏监听兼容文件的成功写入以刷新，输入框在渲染消息时读取 `promptFrame`。
+- 状态栏与输入框的配置即使未加载对应 Mod 也可预先保存；时间显示配置即使未加载 `timestamp-mod` 也可预先保存；i18n 配置需加载 `i18n-mod` 才可使用，宿主锁定时显示只读。
+- 各功能 Mod 独立读取自己的设置，不通过配置插件的运行时状态获取设置。状态栏监听兼容文件的成功写入以刷新，输入框在渲染消息时读取 `promptFrame`，时间显示在渲染用户消息和工具行时读取 `timestamp`。
 
-配置插件与状态栏各自保留兼容格式的默认值及规范化逻辑，不使用跨目录模块导入，确保每个插件目录可单独复制、安装和验证。
+配置插件与各功能 Mod 各自保留兼容格式的默认值及规范化逻辑，不使用跨目录模块导入，确保每个插件目录可单独复制、安装和验证。
 
 ## 验证
 
