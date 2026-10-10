@@ -17,6 +17,7 @@ Claude Code Mod 集合，提供状态栏、Subagent 实时面板、用户输入�
 | 配置区域 | 可视化设置 |
 | --- | --- |
 | 状态栏与配置面板 | `en` / `zh` 显示语言、状态栏位置（现有位置 / 输入框下方）、显示模式（完整 / 简洁）、模块开关和顺序 |
+| 时间显示 | 插件启用开关、时间格式规则；显示用户消息发送时间及工具调用/结果时间 |
 | 用户输入框 | 标题、颜色、横竖线和四角符号 |
 | 原生界面语言（i18n） | 语言代码或 JSON 路径、简体中文/English 原生语言选择器、重新加载已保存的语言包、取消语言修改 |
 | Subagent 实时面板 | 当前自动工作，没有可调配置；打开/清理命令仍保留 |
@@ -35,12 +36,14 @@ Claude Code Mod 集合，提供状态栏、Subagent 实时面板、用户输入�
 | `statusline-mod/` | `statusline-mod` | 使用 Claude Code 原生 Mod UI 渲染两行状态区域，展示模型、会话状态、运行环境、Git 分支与增删统计、Context、Token、缓存命中、配额、成本和工作目录；同时显示运行中的 Subagent 摘要，不包含配置面板。 |
 | `subagent-split-view/` | `subagent-split-view` | 在 Claude Code 右侧打开实时 Subagent 面板，展示 Subagent 的名称、类型、模型、任务、当前活动、thinking/text 流、工具调用及执行结果；Subagent 全部结束后自动关闭面板。 |
 | `i18n-mod/` | `i18n-mod` | 汉化已开放的运行状态、耗时、快捷键、模式及部分提示；按需读取 JSON 语言包，支持简体中文与 English 原文模式，通过统一 `/my-cc-mods-config` 面板选择语言代码或文件路径；新增语言无需注册。 |
+| `timestamp-mod/` | `timestamp-mod` | 在用户消息上方、工具调用和工具结果前显示可配置格式的时间戳；通过统一配置面板控制启用状态与时间格式。 |
 | `user-prompt-frame/` | `user-prompt-frame` | 为用户消息添加“用户输入”边框，按终端宽度自适应，并按终端显示宽度处理中文、英文和 Emoji 混排；任务通知、其他会话消息和 Agent 消息仍使用 Claude Code 默认渲染。 |
 
 ### 各 Mod 的边界
 
 - `cc-mods-config` 独立提供统一配置面板，保存兼容配置文件；主动保存 i18n 时通过宿主配置 API 更新其语言选项，不直接改写 `settings.json`，不依赖其他 Mod 的状态。
 - `statusline-mod` 只观察和渲染会话状态、读取配置，不注册配置面板命令、不写配置，也不覆盖原生 `statusLine` / `subagentStatusLine` 配置。
+- `timestamp-mod` 只观察用户提交、工具调用和工具结果并渲染时间戳；读取统一配置，不改变 Prompt、工具参数、工具结果或会话记录。
 - `subagent-split-view` 只观察和渲染 Subagent 事件，不创建 Agent、不修改 Agent 参数、不改变权限或工具执行结果；日志只保存在当前 Claude Code 进程内，每个 Agent 最多保留 120 条。
 - `i18n-mod` 只改变已开放的界面提示，不翻译会话内容、不调用模型；主动切换语言时通过宿主 `userConfig` 保存自己的语言选项。权限弹窗不在覆盖范围内；与 `statusline-mod` 同用时，原生快捷键提示仍被后者隐藏。
 - `user-prompt-frame` 只改变符合用户输入条件的 `UserMessage` 渲染，不改变消息内容或会话行为。
@@ -69,6 +72,7 @@ claude --plugin-dir ".\statusline-mod"
 claude --plugin-dir ".\subagent-split-view"
 claude --plugin-dir ".\user-prompt-frame"
 claude --plugin-dir ".\i18n-mod"
+claude --plugin-dir ".\timestamp-mod"
 ```
 
 也可以使用绝对路径：
@@ -79,6 +83,7 @@ claude --plugin-dir "D:\Codes\other\cc-mods\statusline-mod"
 claude --plugin-dir "D:\Codes\other\cc-mods\subagent-split-view"
 claude --plugin-dir "D:\Codes\other\cc-mods\user-prompt-frame"
 claude --plugin-dir "D:\Codes\other\cc-mods\i18n-mod"
+claude --plugin-dir "D:\Codes\other\cc-mods\timestamp-mod"
 ```
 
 需要面板和功能 Mod 同时可用时，在同一次启动中加载各目录，例如不加载状态栏、只配置输入框和 i18n：
@@ -93,6 +98,7 @@ macOS/Linux 使用同样的方式，将路径改为 Unix 路径，例如：
 claude --plugin-dir ./cc-mods-config
 claude --plugin-dir ./user-prompt-frame
 claude --plugin-dir ./i18n-mod
+claude --plugin-dir ./timestamp-mod
 ```
 
 ### 方式二：克隆仓库后加载
@@ -109,6 +115,7 @@ claude --plugin-dir ./statusline-mod
 claude --plugin-dir ./subagent-split-view
 claude --plugin-dir ./user-prompt-frame
 claude --plugin-dir ./i18n-mod
+claude --plugin-dir ./timestamp-mod
 ```
 
 ### 方式三：在 `settings.json` 的 `env` 中配置集合目录
@@ -149,7 +156,7 @@ macOS/Linux 示例：
 }
 ```
 
-配置完成后重启 Claude Code。该变量应指向集合仓库根目录，即包含 `cc-mods-config/`、`statusline-mod/`、`subagent-split-view/`、`user-prompt-frame/` 和 `i18n-mod/` 的目录；如果只想临时加载某一个 Mod，请继续使用 `--plugin-dir` 方式。
+配置完成后重启 Claude Code。该变量应指向集合仓库根目录，即包含 `cc-mods-config/`、`statusline-mod/`、`subagent-split-view/`、`user-prompt-frame/`、`i18n-mod/` 和 `timestamp-mod/` 的目录；如果只想临时加载某一个 Mod，请继续使用 `--plugin-dir` 方式。
 
 ### 方式四：复制到本地 Mod 开发目录
 
@@ -167,6 +174,12 @@ macOS/Linux 示例：
 │   ├── locales/zh-CN.json
 │   ├── types/index.d.ts
 │   └── tests/
+├── timestamp-mod/
+│   ├── .claude-plugin/plugin.json
+│   ├── hooks/hooks.json
+│   ├── hooks/register.ts
+│   ├── types/index.d.ts
+│   └── tests/register.test.ts
 └── user-prompt-frame/
     ├── .claude-plugin/plugin.json
     ├── hooks/hooks.json
@@ -205,6 +218,17 @@ macOS/Linux 示例：
 - `promptFrame`：用户输入框标题、颜色、横竖线和四角符号；`user-prompt-frame` 也读取这一段配置。
 
 如果之前通过 `settings.json` 配置了 Python 版 `statusLine` 或 `subagentStatusLine`，请在单独测试本 Mod 时暂时停用旧配置，避免重复显示。
+
+### `timestamp-mod`
+
+加载后，用户消息上方单独显示发送时间；每个工具调用在工具块顶部用一行显示 `开始 → 结束 · 耗时`。该 Mod 不修改模型收到的 Prompt、工具参数或工具结果。
+
+在 `/my-cc-mods-config` 的“时间显示”区域配置：
+
+- `enabled`：是否启用时间显示，默认 `true`；
+- `format`：时间格式，默认 `HH:mm:ss`。
+
+支持占位符 `YYYY`、`YY`、`MM`、`DD`、`HH`、`mm`、`ss`、`SSS`，其他字符原样保留。配置保存在统一配置文件的 `timestamp` 段。
 
 ### `subagent-split-view`
 
@@ -259,6 +283,12 @@ claude plugin test .
 ```
 
 ```powershell
+cd ..\timestamp-mod
+claude plugin validate .
+claude plugin test .
+```
+
+```powershell
 cd ..\user-prompt-frame
 claude plugin validate .
 claude plugin test .
@@ -277,6 +307,8 @@ claude plugin validate .\user-prompt-frame
 claude plugin test .\user-prompt-frame
 claude plugin validate .\i18n-mod
 claude plugin test .\i18n-mod
+claude plugin validate .\timestamp-mod
+claude plugin test .\timestamp-mod
 ```
 
 ## 目录结构
@@ -312,6 +344,12 @@ cc-mods/
 │   ├── locales/zh-CN.json
 │   ├── types/index.d.ts
 │   └── tests/
+├── timestamp-mod/
+│   ├── .claude-plugin/plugin.json
+│   ├── hooks/hooks.json
+│   ├── hooks/register.ts
+│   ├── types/index.d.ts
+│   └── tests/register.test.ts
 └── user-prompt-frame/
     ├── .claude-plugin/plugin.json
     ├── hooks/hooks.json

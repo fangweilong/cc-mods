@@ -1,6 +1,6 @@
 import { atom, read, update } from 'claude-code'
 import type { ConfigRow, EngineInterface, Register } from 'claude-code'
-import type { I18nConfigDraft, StatuslineConfig, StatuslineDisplayMode, StatuslineModule, StatuslinePosition } from '../types'
+import type { I18nConfigDraft, StatuslineConfig, StatuslineDisplayMode, StatuslineModule, StatuslinePosition, TimestampConfig } from '../types'
 
 const UI_COLORS = { cyan: '#50c8ff', red: '#ff5a64', gray: '#8791a0' } as const
 
@@ -21,7 +21,9 @@ const DEFAULT_ORDER = [
 export type ModuleId = StatuslineModule
 export type Language = 'en' | 'zh'
 
-export type StatusConfig = StatuslineConfig
+export type StatusConfig = StatuslineConfig & {
+  timestamp: TimestampConfig
+}
 
 export const DEFAULT_CONFIG: StatusConfig = {
   position: 'session-mode',
@@ -51,6 +53,10 @@ export const DEFAULT_CONFIG: StatusConfig = {
     bottomLeft: '└',
     bottomRight: '┘',
   },
+  timestamp: {
+    enabled: true,
+    format: 'HH:mm:ss',
+  },
 }
 
 const configAtom = atom({ plugin: 'cc-mods-config', key: 'config' } as const, cloneConfig(DEFAULT_CONFIG))
@@ -69,6 +75,7 @@ function cloneConfig(value: StatusConfig): StatusConfig {
     order: [...value.order],
     modules: { ...value.modules },
     promptFrame: { ...value.promptFrame },
+    timestamp: { ...value.timestamp },
   }
 }
 
@@ -83,6 +90,7 @@ export function normalizeConfig(value: unknown): StatusConfig {
     order?: unknown
     modules?: unknown
     promptFrame?: unknown
+    timestamp?: unknown
   }
 
   if (data.position === 'session-mode' || data.position === 'below-prompt') {
@@ -132,6 +140,12 @@ export function normalizeConfig(value: unknown): StatusConfig {
         result.promptFrame[field] = frame[field]
       }
     }
+  }
+
+  if (data.timestamp && typeof data.timestamp === 'object') {
+    const timestamp = data.timestamp as Record<string, unknown>
+    if (typeof timestamp.enabled === 'boolean') result.timestamp.enabled = timestamp.enabled
+    if (typeof timestamp.format === 'string' && timestamp.format.length > 0) result.timestamp.format = timestamp.format
   }
 
   return result
@@ -440,6 +454,45 @@ async function renderConfigPane($: EngineInterface, e: any): Promise<any> {
         children: [
           Text({ key: 'i18n-config-heading', color: UI_COLORS.cyan, bold: true, children: [language === 'zh' ? 'i18n-mod · 原生界面语言' : 'i18n-mod · Native UI language'] }),
           ...i18nControls,
+        ],
+      }),
+      Box({
+        key: 'timestamp-config-section',
+        flexDirection: 'column',
+        flexShrink: 0,
+        marginTop: 1,
+        children: [
+          Text({ key: 'timestamp-config-heading', color: UI_COLORS.cyan, bold: true, children: [language === 'zh' ? 'timestamp-mod · 时间显示' : 'timestamp-mod · Timestamps'] }),
+          Text({ color: UI_COLORS.gray, children: [language === 'zh' ? '显示用户消息发送时间及工具调用开始/结束时间。' : 'Show user message send time and tool call start/end times.'] }),
+          Box({ children: [
+            Text({ color: UI_COLORS.gray, children: [language === 'zh' ? '插件状态：' : 'Plugin: '] }),
+            Button({
+              key: 'timestamp-enabled-toggle',
+              label: current.timestamp.enabled ? enabled : disabled,
+              onPress: () => changeConfig($, latest => ({
+                ...latest,
+                timestamp: { ...latest.timestamp, enabled: !latest.timestamp.enabled },
+              })),
+            }),
+          ] }),
+          Input({
+            key: 'timestamp-format',
+            label: language === 'zh' ? '时间格式' : 'Time format',
+            value: current.timestamp.format,
+            placeholder: 'YYYY-MM-DD HH:mm:ss',
+            submitLabel: '',
+            onInput: (value: string) => changeConfig($, latest => ({
+              ...latest,
+              timestamp: { ...latest.timestamp, format: value || latest.timestamp.format },
+            })),
+            onSubmit: (value: string) => changeConfig($, latest => ({
+              ...latest,
+              timestamp: { ...latest.timestamp, format: value || latest.timestamp.format },
+            })),
+          }),
+          Text({ dimColor: true, children: [language === 'zh'
+            ? '占位符：YYYY、YY、MM、DD、HH、mm、ss、SSS；其他字符原样保留。'
+            : 'Tokens: YYYY, YY, MM, DD, HH, mm, ss, SSS; other characters are kept.'] }),
         ],
       }),
       Box({

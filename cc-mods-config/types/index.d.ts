@@ -39,10 +39,15 @@ export type I18nConfigDraft = {
   error: string
 }
 
+export type TimestampConfig = {
+  enabled: boolean
+  format: string
+}
+
 declare module 'claude-code' {
   interface PluginState {
     'cc-mods-config': {
-      config: StatuslineConfig
+      config: StatuslineConfig & { timestamp: TimestampConfig }
       i18nDraft: I18nConfigDraft
     }
   }
