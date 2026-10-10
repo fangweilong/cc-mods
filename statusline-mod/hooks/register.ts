@@ -180,6 +180,8 @@ let config: StatusConfig = cloneConfig(DEFAULT_CONFIG)
 let activeTurn = false
 let configPath = ''
 const agentDetails = new Map<string, AgentDetail>()
+// turn.complete 携带整轮汇总值；记录已观测的 step，避免重复累计。
+const observedTurnUsage = new Set<string>()
 
 let snapshot: StatusSnapshot = {
   model: 'Agent',
@@ -548,6 +550,17 @@ function applyTurnUsage(usage: TurnUsage | undefined): void {
   }
 }
 
+function applyAgentTurnUsage(agentId: string, usage: TurnUsage | undefined): void {
+  if (!usage) return
+  const previous = agentDetails.get(agentId) ?? { inputTokens: 0, outputTokens: 0 }
+  agentDetails.set(agentId, {
+    ...previous,
+    model: usage.model || previous.model,
+    inputTokens: previous.inputTokens + usage.input_tokens,
+    outputTokens: previous.outputTokens + usage.output_tokens,
+  })
+}
+
 function updateAgentDetail(agentId: string, patch: Partial<AgentDetail>): void {
   const previous = agentDetails.get(agentId) ?? { inputTokens: 0, outputTokens: 0 }
   agentDetails.set(agentId, { ...previous, ...patch })
@@ -786,21 +799,31 @@ export const register: Register = on => {
       snapshot = { ...snapshot, model: e.model, state: 'Thinking' }
       show($)
     }
-    yield* next(e)
+
+    const result = yield* next(e)
+    if (result.usage) {
+      observedTurnUsage.add(e.turnId)
+      if (e.agentId) {
+        applyAgentTurnUsage(e.agentId, result.usage)
+        await refreshAgents($)
+      } else {
+        applyTurnUsage(result.usage)
+      }
+      show($)
+    }
+    return result
   })
 
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
+    const hadStepUsage = observedTurnUsage.delete(e.turnId)
     if (e.agentId) {
-      updateAgentDetail(e.agentId, {
-        outputTokens: (agentDetails.get(e.agentId)?.outputTokens ?? 0) + (e.usage?.output_tokens ?? 0),
-        inputTokens: (agentDetails.get(e.agentId)?.inputTokens ?? 0) + (e.usage?.input_tokens ?? 0),
-      })
+      if (!hadStepUsage) applyAgentTurnUsage(e.agentId, e.usage)
       await refreshAgents($)
     } else {
+      if (!hadStepUsage) applyTurnUsage(e.usage)
       activeTurn = false
       snapshot = { ...snapshot, state: 'Idle' }
-      applyTurnUsage(e.usage)
       await refreshLiveData($)
     }
     show($)
