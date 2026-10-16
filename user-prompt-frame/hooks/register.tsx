@@ -138,11 +138,11 @@ export const register: Register = on => {
 
     return (
       <Box key={`prompt-frame-${e.requestId}`} width={width} flexDirection="column">
-        <Text bold color={frame.color}>{top}</Text>
+        <Text weight="bold" color={frame.color}>{top}</Text>
         {body.map((line, index) => (
           <Text key={`prompt-line-${index}`}>{frame.vertical}{NON_BREAKING_SPACE.repeat(2)}{padLine(line, contentWidth)}{NON_BREAKING_SPACE.repeat(2)}{frame.vertical}</Text>
         ))}
-        <Text bold color={frame.color}>{bottom}</Text>
+        <Text weight="bold" color={frame.color}>{bottom}</Text>
       </Box>
     )
   })
