@@ -723,7 +723,7 @@ function renderStatusRow($: EngineInterface, e: RenderInput<'SessionMode' | 'Pro
     children: row.map(segment => Text({
       wrap: 'wrap',
       color: segment.color,
-      bold: segment.bold,
+      weight: segment.bold ? 'bold' : undefined,
       dimColor: segment.dimColor,
       children: [segment.text],
     })),

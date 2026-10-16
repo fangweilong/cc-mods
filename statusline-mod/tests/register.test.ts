@@ -224,7 +224,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     const model = await ui.find({ type: 'Text', text: /^Agent$/ })
     const dividers = await ui.findAll({ type: 'Text', text: /^ \| $/ })
     expect(model?.props.color).toBe('#4ec9b0')
-    expect(model?.props.bold).toBe(true)
+    expect(model?.props.weight).toBe('bold')
     expect(dividers.length).toBeGreaterThan(0)
     expect(dividers.every(divider => divider.props.dimColor === true)).toBe(true)
     expect(await ui.find({ type: 'Text', text: /^↑0 ↓0$/ })).toBeDefined()
@@ -371,10 +371,11 @@ for (const surface of ['terminal', 'desktop'] as const) {
         : await $.ui.mount({ plugin: 'statusline-mod', surface, viewport: { columns: 12, rows: 24 }, component: 'PromptHint', props: { hint: '? for shortcuts', isDraft: false, isWorking: false } })
       for (const displayMode of ['full', 'compact', 'full', 'compact'] as const) {
         await writeConfigFile($, { path: '/test-home/.config/my-cc-mods/config.json', text: JSON.stringify({ ...DEFAULT_CONFIG, position, displayMode }) })
+        await ui.redraw()
         const model = await ui.find({ type: 'Text', text: displayMode === 'full' ? /^🤖 Test Model$/ : /^Test Model$/ })
         expect(model).toBeDefined()
         expect(model?.props.color).toBe('#4ec9b0')
-        expect(model?.props.bold).toBe(true)
+        expect(model?.props.weight).toBe('bold')
         expect(model?.props.wrap).toBe('wrap')
         expect(await ui.find({ type: 'Text', text: displayMode === 'full' ? '🧮 ↑0 ↓0' : '↑0 ↓0' })).toBeDefined()
         expect(await ui.find({ type: 'Text', text: displayMode === 'full' ? '🎯 Idle' : 'Idle' })).toBeDefined()
@@ -384,6 +385,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
       }
       world.denied = true
       await writeConfigFile($, { path: '/test-home/.config/my-cc-mods/config.json', text: JSON.stringify({ ...DEFAULT_CONFIG, position, displayMode: 'full' }) })
+      await ui.redraw()
       expect(await ui.find({ type: 'Text', text: /^Test Model$/ })).toBeDefined()
       expect(await ui.find({ type: 'Text', text: /🤖/ })).toBeUndefined()
       await ui.unmount()
@@ -430,6 +432,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await ui.find({ type: 'Text', text: /Idle/ })).toBeDefined()
     const next = { ...DEFAULT_CONFIG, language: 'zh', modules: { ...DEFAULT_CONFIG.modules, model: false } }
     await writeConfigFile($, { path: '/test-home/.config/my-cc-mods/config.json', text: JSON.stringify(next) })
+    await ui.redraw()
     expect(await ui.find({ type: 'Text', text: /Test Model/ })).toBeUndefined()
     expect(await ui.find({ type: 'Text', text: /就绪/ })).toBeDefined()
     expect(world.reads).toBe(2)
@@ -451,11 +454,9 @@ for (const surface of ['terminal', 'desktop'] as const) {
       const native = await ui.find({ key: 'native-hint-row' })
 
       expect(layout?.props.flexDirection).toBe('column')
-      expect(layout?.children[0]).toEqual({
-        type: native?.type,
-        props: native?.props,
-        children: native?.children,
-      })
+      expect(layout?.children[0]?.type).toBe(native?.type)
+      expect(layout?.children[0]?.props).toEqual(native?.props)
+      expect(layout?.children[0]?.children).toEqual(native?.children)
       expect(layout?.children).toHaveLength(2)
       expect(native?.text).toContain(props.hint)
       expect((await ui.find({ type: 'Text', text: props.hint }))?.props.dimColor).toBe(true)
@@ -493,6 +494,8 @@ for (const surface of ['terminal', 'desktop'] as const) {
     const hint = await $.ui.mount({ plugin: 'statusline-mod', surface, component: 'PromptHint', props: { hint: 'esc to interrupt', isDraft: true, isWorking: true } })
     for (const position of ['below-prompt', 'session-mode', 'below-prompt'] as const) {
       await writeConfigFile($, { path: '/test-home/.config/my-cc-mods/config.json', text: JSON.stringify({ ...DEFAULT_CONFIG, position, language: 'zh' }) })
+      await mode.redraw()
+      await hint.redraw()
       const selected = position === 'session-mode' ? mode : hint
       const other = position === 'session-mode' ? hint : mode
       expect(await selected.find({ type: 'Text', text: /Test Model/ })).toBeDefined()
@@ -503,6 +506,8 @@ for (const surface of ['terminal', 'desktop'] as const) {
     }
     world.denied = true
     await writeConfigFile($, { path: '/test-home/.config/my-cc-mods/config.json', text: JSON.stringify(DEFAULT_CONFIG) })
+    await mode.redraw()
+    await hint.redraw()
     expect(await hint.find({ type: 'Text', text: /Test Model/ })).toBeDefined()
     expect(await mode.find({ type: 'Text', text: /Test Model/ })).toBeUndefined()
     await mode.unmount()
