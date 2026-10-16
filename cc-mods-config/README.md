@@ -20,22 +20,16 @@ claude --plugin-dir "./cc-mods-config" --plugin-dir "./user-prompt-frame"
 
 ## 使用
 
-运行 `/my-cc-mods-config` 会打开统一可视化配置面板，这是唯一的配置面板命令入口：
+运行 `/my-cc-mods-config` 会打开统一可视化配置面板，这是唯一的配置面板命令入口。面板使用 Tabs 分组，点击顶部 Tab 切换当前配置区域；保存/关闭操作始终固定在底部：
 
-- 切换 `en` / `zh`
-- 选择状态栏位置：模式提示区域（现有位置）/ 输入框下方
-- 选择状态栏显示模式：完整模式（保留模块前缀 Emoji）/ 简洁模式（默认，仅移除模块前缀 Emoji，保留数据指示符号、颜色和模块内容）
-- 启用/停用模块
-- 调整模块顺序
-- 编辑用户输入框标题、颜色和边框符号
-- 配置时间显示 Mod：启用/停用，以及时间格式规则
-- 配置原生界面语言（i18n）：语言代码或 JSON 路径、简体中文/English 原生语言选择器
-- 重新加载已保存的 JSON 语言包，或单独取消语言修改
-- 关闭面板
+- **Statusline / 状态栏**：使用 `Select` 选择面板语言、状态栏位置和显示模式；使用按钮启用/停用模块、调整模块顺序
+- **Prompt frame / 输入框**：使用 `Input` 编辑用户输入框标题、颜色和边框符号
+- **Language & time / 语言与时间**：使用 `Input` / `Select` 配置 i18n 语言代码或 JSON 路径、时间格式，以及重新加载或取消语言修改
+- **Subagents**：显示 Subagent 面板的使用提示；当前没有可调配置
 
-配置按 `statusline-mod`、`timestamp-mod`、`user-prompt-frame`、`i18n-mod` 和 `subagent-split-view` 分组，标题标明 Mod 名称与配置能力；各组之间留一行间隔，底部保存/关闭操作区也单独留出间隔。Subagent 分组仅提示当前没有可调配置。
+所有 Tab 都保留统一的保存和关闭操作；切换 Tab 不会提交草稿。
 
-语言选择改为单个原生 `Select` 控件，不再横排两个语言按钮。控件聚焦后使用方向键选择、Enter 确认，Tab 切换到其他控件；自定义语言代码和 JSON 路径仍通过输入框编辑。
+配置按 `statusline-mod`、`timestamp-mod`、`user-prompt-frame`、`i18n-mod` 和 `subagent-split-view` 分布在对应 Tab 中，避免单页表单过长。选项使用原生 `Select` 和 `Input` 控件，Tab 使用可点击按钮切换；当前 Tab 之外的控件不会抢占焦点或参与编辑。Subagent Tab 仅提示当前没有可调配置。
 
 修改后点击 `Save configuration` / 保存配置统一提交；`Close` 不保存未提交的草稿。i18n 需同时加载 `i18n-mod`，没有加载时提示不可用，宿主策略锁定时仅显示只读来源。
 
@@ -65,7 +59,7 @@ claude plugin validate ./cc-mods-config
 claude plugin test ./cc-mods-config
 ```
 
-测试覆盖 terminal/desktop 面板、中英文 Mod 分组标题与间隔、状态栏位置和完整/简洁模式选择/保存/重新打开及旧配置默认值、模式无效值回退、唯一命令注册与已移除入口不再打开面板、无功能 Mod 时独立保存、兼容文件读取、草稿取消、i18n 校验和锁定策略、部分保存失败与重试。
+测试覆盖 terminal/desktop 面板、Tabs 切换与当前 Tab 内容隔离、中英文 Mod 标题、原生 Select/Input 控件、状态栏位置和完整/简洁模式选择/保存/重新打开及旧配置默认值、模式无效值回退、唯一命令注册与已移除入口不再打开面板、无功能 Mod 时独立保存、兼容文件读取、草稿取消、i18n 校验和锁定策略、部分保存失败与重试。
 
 类型声明由 Claude Code 在加载后生成到 `.claude-plugin/types/`，无需安装 npm 依赖。
 

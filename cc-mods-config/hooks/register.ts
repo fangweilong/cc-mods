@@ -63,6 +63,10 @@ const configAtom = atom({ plugin: 'cc-mods-config', key: 'config' } as const, cl
 const i18nDraftAtom = atom({ plugin: 'cc-mods-config', key: 'i18nDraft' } as const, { source: null, error: '' } as I18nConfigDraft)
 
 const CONFIG_PANE = 'my-cc-mods-config'
+type ConfigTab = 'statusline' | 'prompt-frame' | 'language-time' | 'subagents'
+
+const CONFIG_TABS: readonly ConfigTab[] = ['statusline', 'prompt-frame', 'language-time', 'subagents']
+let activeTab: ConfigTab = 'statusline'
 let config: StatusConfig = cloneConfig(DEFAULT_CONFIG)
 let configPath = ''
 let draftConfig: StatusConfig | undefined
@@ -267,6 +271,17 @@ function configModuleLabel(module: ModuleId, language: Language): string {
   return labels[module][language]
 }
 
+function configTabLabel(tab: ConfigTab, language: Language): string {
+  const labels: Record<ConfigTab, { en: string; zh: string }> = {
+    statusline: { en: 'Statusline', zh: '状态栏' },
+    'prompt-frame': { en: 'Prompt frame', zh: '输入框' },
+    'language-time': { en: 'Language & time', zh: '语言与时间' },
+    subagents: { en: 'Subagents', zh: 'Subagent' },
+  }
+  return labels[tab][language]
+}
+
+
 async function renderConfigPane($: EngineInterface, e: any): Promise<any> {
   const stateConfig = await read($, configAtom)
   const current = draftConfig ?? cloneConfig(stateConfig ?? DEFAULT_CONFIG)
@@ -280,7 +295,6 @@ async function renderConfigPane($: EngineInterface, e: any): Promise<any> {
   const moveDown = language === 'zh' ? '下移' : '↓'
   const close = language === 'zh' ? '关闭' : 'Close'
   const save = language === 'zh' ? '保存配置' : 'Save configuration'
-  const languageLabel = language === 'zh' ? '语言：中文' : 'Language: English'
   const i18nDraft = await read($, i18nDraftAtom)
   let i18nRow: ConfigRow | undefined
   try {
@@ -389,122 +403,119 @@ async function renderConfigPane($: EngineInterface, e: any): Promise<any> {
     ],
   }))
 
+  const statuslineSection = Box({
+    key: 'statusline-config-section',
+    flexDirection: 'column',
+    flexShrink: 0,
+    marginTop: 1,
+    children: [
+      Text({ key: 'statusline-config-heading', color: UI_COLORS.cyan, weight: 'bold', children: [language === 'zh' ? 'statusline-mod · 状态栏' : 'statusline-mod · Statusline'] }),
+      Text({ color: UI_COLORS.gray, children: [language === 'zh' ? '状态栏与配置面板语言' : 'Statusline and panel language'] }),
+      Select({
+        key: 'panel-language',
+        label: language === 'zh' ? '配置面板语言' : 'Panel language',
+        value: current.language,
+        options: [{ value: 'en', label: 'English' }, { value: 'zh', label: '简体中文' }],
+        onSelect: (value: Language) => changeConfig($, latest => ({ ...latest, language: value })),
+      }),
+      Select({
+        key: 'statusline-position',
+        label: language === 'zh' ? '状态栏位置' : 'Statusline position',
+        value: current.position,
+        options: [
+          { value: 'session-mode', label: language === 'zh' ? '模式提示区域（现有位置）' : 'Mode area (existing position)' },
+          { value: 'below-prompt', label: language === 'zh' ? '输入框下方' : 'Below input box' },
+        ],
+        onSelect: (value: StatuslinePosition) => changeConfig($, latest => ({ ...latest, position: value })),
+      }),
+      Select({
+        key: 'statusline-display-mode',
+        label: language === 'zh' ? '状态栏显示模式' : 'Statusline display mode',
+        value: current.displayMode,
+        options: [
+          { value: 'full', label: language === 'zh' ? '完整模式' : 'Full' },
+          { value: 'compact', label: language === 'zh' ? '简洁模式' : 'Compact' },
+        ],
+        onSelect: (value: StatuslineDisplayMode) => changeConfig($, latest => ({ ...latest, displayMode: value })),
+      }),
+      Text({ color: UI_COLORS.gray, children: [language === 'zh' ? '模块：按钮可切换、↑/↓ 可排序' : 'Toggle modules or reorder them with the buttons'] }),
+      ...moduleRows,
+    ],
+  })
+
+  const promptFrameSection = Box({
+    key: 'prompt-frame-config-section',
+    flexDirection: 'column',
+    flexShrink: 0,
+    marginTop: 1,
+    children: [
+      Text({ key: 'prompt-frame-config-heading', color: UI_COLORS.cyan, weight: 'bold', children: [language === 'zh' ? 'user-prompt-frame · 用户输入框' : 'user-prompt-frame · User prompt frame'] }),
+      Text({ color: UI_COLORS.gray, children: [language === 'zh' ? '修改字段后点击保存配置' : 'Edit fields, then click Save configuration'] }),
+      ...frameInputs,
+    ],
+  })
+
+  const languageTimeSection = Box({
+    key: 'language-time-config-section',
+    flexDirection: 'column',
+    flexShrink: 0,
+    marginTop: 1,
+    children: [
+      Text({ key: 'i18n-config-heading', color: UI_COLORS.cyan, weight: 'bold', children: [language === 'zh' ? 'i18n-mod · 原生界面语言' : 'i18n-mod · Native UI language'] }),
+      ...i18nControls,
+      Text({ key: 'timestamp-config-heading', color: UI_COLORS.cyan, weight: 'bold', children: [language === 'zh' ? 'timestamp-mod · 时间显示' : 'timestamp-mod · Timestamps'] }),
+      Text({ color: UI_COLORS.gray, children: [language === 'zh' ? '显示用户消息发送时间及工具调用开始/结束时间。' : 'Show user message send time and tool call start/end times.'] }),
+      Box({ children: [
+        Text({ color: UI_COLORS.gray, children: [language === 'zh' ? '插件状态：' : 'Plugin: '] }),
+        Button({
+          key: 'timestamp-enabled-toggle',
+          label: current.timestamp.enabled ? enabled : disabled,
+          onPress: () => changeConfig($, latest => ({ ...latest, timestamp: { ...latest.timestamp, enabled: !latest.timestamp.enabled } })),
+        }),
+      ] }),
+      Input({
+        key: 'timestamp-format',
+        label: language === 'zh' ? '时间格式' : 'Time format',
+        value: current.timestamp.format,
+        placeholder: 'YYYY-MM-DD HH:mm:ss',
+        submitLabel: '',
+        onInput: (value: string) => changeConfig($, latest => ({ ...latest, timestamp: { ...latest.timestamp, format: value || latest.timestamp.format } })),
+        onSubmit: (value: string) => changeConfig($, latest => ({ ...latest, timestamp: { ...latest.timestamp, format: value || latest.timestamp.format } })),
+      }),
+      Text({ dimColor: true, children: [language === 'zh' ? '占位符：YYYY、YY、MM、DD、HH、mm、ss、SSS；其他字符原样保留。' : 'Tokens: YYYY, YY, MM, DD, HH, mm, ss, SSS; other characters are kept.'] }),
+    ],
+  })
+
+  const subagentSection = Box({
+    key: 'subagent-config-section',
+    flexDirection: 'column',
+    flexShrink: 0,
+    marginTop: 1,
+    children: [
+      Text({ key: 'subagent-config-heading', color: UI_COLORS.cyan, weight: 'bold', children: [language === 'zh' ? 'subagent-split-view · Subagent 面板' : 'subagent-split-view · Subagent pane'] }),
+      Text({ dimColor: true, children: [language === 'zh' ? 'Subagent 面板自动显示，当前没有可调配置。' : 'The Subagent pane opens automatically and currently has no configurable options.'] }),
+      Text({ dimColor: true, children: [language === 'zh' ? '可在 Subagent 面板中点击名称查看明细，再点击 ↩ main 返回主会话。' : 'Click a subagent name in its pane to inspect it, then use ↩ main to return.'] }),
+    ],
+  })
+
+  const tabContent = { statusline: statuslineSection, 'prompt-frame': promptFrameSection, 'language-time': languageTimeSection, subagents: subagentSection }[activeTab]
+  const tabButtons = CONFIG_TABS.map(tab => Button({
+    key: `config-tab-${tab}`,
+    label: configTabLabel(tab, language),
+    variant: activeTab === tab ? 'primary' : 'secondary',
+    onPress: () => {
+      activeTab = tab
+      $.ui.invalidate('ui.render')
+    },
+  }))
+
   return Box({
     flexDirection: 'column',
     children: [
-      Text({ color: UI_COLORS.cyan, bold: true, children: [title] }),
-      Box({
-        key: 'statusline-config-section',
-        flexDirection: 'column',
-        flexShrink: 0,
-        marginTop: 1,
-        children: [
-          Text({ key: 'statusline-config-heading', color: UI_COLORS.cyan, bold: true, children: [language === 'zh' ? 'statusline-mod · 状态栏' : 'statusline-mod · Statusline'] }),
-          Text({ color: UI_COLORS.gray, children: [language === 'zh' ? '状态栏与配置面板语言' : 'Statusline and panel language'] }),
-          Box({
-            children: [
-              Text({ color: UI_COLORS.gray, children: ['Language / 语言: '] }),
-              Button({
-                key: 'panel-language',
-                label: languageLabel,
-                onPress: () => changeConfig($, latest => ({ ...latest, language: latest.language === 'en' ? 'zh' : 'en' })),
-              }),
-            ],
-          }),
-          Select({
-            key: 'statusline-position',
-            label: language === 'zh' ? '状态栏位置' : 'Statusline position',
-            value: current.position,
-            options: [
-              { value: 'session-mode', label: language === 'zh' ? '模式提示区域（现有位置）' : 'Mode area (existing position)' },
-              { value: 'below-prompt', label: language === 'zh' ? '输入框下方' : 'Below input box' },
-            ],
-            onSelect: (value: StatuslinePosition) => changeConfig($, latest => ({ ...latest, position: value })),
-          }),
-          Select({
-            key: 'statusline-display-mode',
-            label: language === 'zh' ? '状态栏显示模式' : 'Statusline display mode',
-            value: current.displayMode,
-            options: [
-              { value: 'full', label: language === 'zh' ? '完整模式' : 'Full' },
-              { value: 'compact', label: language === 'zh' ? '简洁模式' : 'Compact' },
-            ],
-            onSelect: (value: StatuslineDisplayMode) => changeConfig($, latest => ({ ...latest, displayMode: value })),
-          }),
-          Text({ color: UI_COLORS.gray, children: [language === 'zh' ? '模块：按钮可切换、↑/↓ 可排序' : 'Toggle modules or reorder them with the buttons'] }),
-          ...moduleRows,
-        ],
-      }),
-      Box({
-        key: 'prompt-frame-config-section',
-        flexDirection: 'column',
-        flexShrink: 0,
-        marginTop: 1,
-        children: [
-          Text({ key: 'prompt-frame-config-heading', color: UI_COLORS.cyan, bold: true, children: [language === 'zh' ? 'user-prompt-frame · 用户输入框' : 'user-prompt-frame · User prompt frame'] }),
-          Text({ color: UI_COLORS.gray, children: [language === 'zh' ? '修改字段后点击保存配置' : 'Edit fields, then click Save configuration'] }),
-          ...frameInputs,
-        ],
-      }),
-      Box({
-        key: 'i18n-config-section',
-        flexDirection: 'column',
-        flexShrink: 0,
-        marginTop: 1,
-        children: [
-          Text({ key: 'i18n-config-heading', color: UI_COLORS.cyan, bold: true, children: [language === 'zh' ? 'i18n-mod · 原生界面语言' : 'i18n-mod · Native UI language'] }),
-          ...i18nControls,
-        ],
-      }),
-      Box({
-        key: 'timestamp-config-section',
-        flexDirection: 'column',
-        flexShrink: 0,
-        marginTop: 1,
-        children: [
-          Text({ key: 'timestamp-config-heading', color: UI_COLORS.cyan, bold: true, children: [language === 'zh' ? 'timestamp-mod · 时间显示' : 'timestamp-mod · Timestamps'] }),
-          Text({ color: UI_COLORS.gray, children: [language === 'zh' ? '显示用户消息发送时间及工具调用开始/结束时间。' : 'Show user message send time and tool call start/end times.'] }),
-          Box({ children: [
-            Text({ color: UI_COLORS.gray, children: [language === 'zh' ? '插件状态：' : 'Plugin: '] }),
-            Button({
-              key: 'timestamp-enabled-toggle',
-              label: current.timestamp.enabled ? enabled : disabled,
-              onPress: () => changeConfig($, latest => ({
-                ...latest,
-                timestamp: { ...latest.timestamp, enabled: !latest.timestamp.enabled },
-              })),
-            }),
-          ] }),
-          Input({
-            key: 'timestamp-format',
-            label: language === 'zh' ? '时间格式' : 'Time format',
-            value: current.timestamp.format,
-            placeholder: 'YYYY-MM-DD HH:mm:ss',
-            submitLabel: '',
-            onInput: (value: string) => changeConfig($, latest => ({
-              ...latest,
-              timestamp: { ...latest.timestamp, format: value || latest.timestamp.format },
-            })),
-            onSubmit: (value: string) => changeConfig($, latest => ({
-              ...latest,
-              timestamp: { ...latest.timestamp, format: value || latest.timestamp.format },
-            })),
-          }),
-          Text({ dimColor: true, children: [language === 'zh'
-            ? '占位符：YYYY、YY、MM、DD、HH、mm、ss、SSS；其他字符原样保留。'
-            : 'Tokens: YYYY, YY, MM, DD, HH, mm, ss, SSS; other characters are kept.'] }),
-        ],
-      }),
-      Box({
-        key: 'subagent-config-section',
-        flexDirection: 'column',
-        flexShrink: 0,
-        marginTop: 1,
-        children: [
-          Text({ key: 'subagent-config-heading', color: UI_COLORS.cyan, bold: true, children: [language === 'zh' ? 'subagent-split-view · Subagent 面板' : 'subagent-split-view · Subagent pane'] }),
-          Text({ dimColor: true, children: [language === 'zh' ? 'Subagent 面板自动显示，当前没有可调配置。' : 'The Subagent pane opens automatically and currently has no configurable options.'] }),
-        ],
-      }),
+      Text({ color: UI_COLORS.cyan, weight: 'bold', children: [title] }),
+      Box({ key: 'config-tabs', flexDirection: 'row', gap: 1, children: tabButtons }),
+      Text({ color: UI_COLORS.gray, children: [configTabLabel(activeTab, language)] }),
+      tabContent,
       Box({
         key: 'config-actions',
         flexShrink: 0,
@@ -515,6 +526,7 @@ async function renderConfigPane($: EngineInterface, e: any): Promise<any> {
             draftConfig = undefined
             await syncConfigState($)
             await resetI18nDraft($)
+            activeTab = 'statusline'
             await $.ui.close({ id: CONFIG_PANE })
           } }),
         ],
@@ -548,6 +560,7 @@ export const register: Register = on => {
 
   on('command.run', { command: 'my-cc-mods-config' }, async $ => {
     await readConfig($, await homeDirectory($))
+    activeTab = 'statusline'
     await syncConfigState($)
     await resetI18nDraft($)
     await $.ui.open({ id: CONFIG_PANE, title: 'CC Mods Config', focus: true, closeOnEscape: true })

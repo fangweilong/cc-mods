@@ -62,12 +62,17 @@ function mountConfig($: Engine, surface: 'terminal' | 'desktop' = 'terminal') {
     props: { title: 'CC Mods Config', isFocused: true, bodyColumns: 120, placement: 'inline', scroll: { offset: 0, bodyRows: 80 }, view: {} },
   })
 }
+async function selectTab(ui: Awaited<ReturnType<typeof mountConfig>>, tab: 'statusline' | 'prompt-frame' | 'language-time' | 'subagents'): Promise<void> {
+  await ui.press({ key: `config-tab-${tab}` })
+}
+
 
 for (const surface of ['terminal', 'desktop'] as const) {
   test(`renders unified i18n controls on ${surface}`, async ($, on) => {
     const world = mockConfig(on)
     await openConfig($)
     const ui = await mountConfig($, surface)
+    await selectTab(ui, 'language-time')
     expect((await ui.find({ key: 'i18n-language-source' }))?.props.value).toBe('zh-CN')
     expect((await ui.find({ key: 'i18n-language-preset' }))?.type).toBe('Select')
     expect(await ui.find({ key: 'i18n-zh-CN' })).toBeUndefined()
@@ -86,41 +91,36 @@ for (const surface of ['terminal', 'desktop'] as const) {
       world.file = JSON.stringify({ ...DEFAULT_CONFIG, language })
       await openConfig($)
       const ui = await mountConfig($, surface)
-      const sections = [
-        ['statusline', language === 'zh' ? 'statusline-mod · 状态栏' : 'statusline-mod · Statusline'],
-        ['prompt-frame', language === 'zh' ? 'user-prompt-frame · 用户输入框' : 'user-prompt-frame · User prompt frame'],
-        ['i18n', language === 'zh' ? 'i18n-mod · 原生界面语言' : 'i18n-mod · Native UI language'],
-        ['timestamp', language === 'zh' ? 'timestamp-mod · 时间显示' : 'timestamp-mod · Timestamps'],
-        ['subagent', language === 'zh' ? 'subagent-split-view · Subagent 面板' : 'subagent-split-view · Subagent pane'],
+      const tabs = [
+        ['statusline', 'statusline-config-section', language === 'zh' ? 'statusline-mod · 状态栏' : 'statusline-mod · Statusline'],
+        ['prompt-frame', 'prompt-frame-config-section', language === 'zh' ? 'user-prompt-frame · 用户输入框' : 'user-prompt-frame · User prompt frame'],
+        ['language-time', 'language-time-config-section', language === 'zh' ? 'i18n-mod · 原生界面语言' : 'i18n-mod · Native UI language'],
+        ['subagents', 'subagent-config-section', language === 'zh' ? 'subagent-split-view · Subagent 面板' : 'subagent-split-view · Subagent pane'],
       ] as const
-      for (const [key, heading] of sections) {
-        const section = await ui.find({ key: `${key}-config-section` })
+      for (const [tab, key, heading] of tabs) {
+        await selectTab(ui, tab)
+        const section = await ui.find({ key })
         expect(section?.type).toBe('Box')
         expect(section?.props.flexDirection).toBe('column')
         expect(section?.props.marginTop).toBe(1)
         expect(section?.props.flexShrink).toBe(0)
         expect(await ui.find({ type: 'Text', text: heading })).toBeDefined()
       }
+      await selectTab(ui, 'statusline')
+      expect((await ui.find({ key: 'config-tabs' }))?.props.flexDirection).toBe('row')
       expect((await ui.find({ key: 'config-actions' }))?.props.marginTop).toBe(1)
-      expect(await ui.find({ key: 'panel-language' })).toBeDefined()
+      expect((await ui.find({ key: 'panel-language' }))?.type).toBe('Select')
       const position = await ui.find({ key: 'statusline-position' })
       expect(position?.type).toBe('Select')
       expect(position?.props.value).toBe('session-mode')
       expect(position?.props.label).toBe(language === 'zh' ? '状态栏位置' : 'Statusline position')
-      expect(position?.props.options).toEqual([
-        { value: 'session-mode', label: language === 'zh' ? '模式提示区域（现有位置）' : 'Mode area (existing position)' },
-        { value: 'below-prompt', label: language === 'zh' ? '输入框下方' : 'Below input box' },
-      ])
       const displayMode = await ui.find({ key: 'statusline-display-mode' })
       expect(displayMode?.type).toBe('Select')
       expect(displayMode?.props.value).toBe('compact')
-      expect(displayMode?.props.label).toBe(language === 'zh' ? '状态栏显示模式' : 'Statusline display mode')
-      expect(displayMode?.props.options).toEqual([
-        { value: 'full', label: language === 'zh' ? '完整模式' : 'Full' },
-        { value: 'compact', label: language === 'zh' ? '简洁模式' : 'Compact' },
-      ])
       expect(await ui.find({ key: 'module-model-toggle' })).toBeDefined()
+      await selectTab(ui, 'prompt-frame')
       expect(await ui.find({ key: 'prompt-frame-title' })).toBeDefined()
+      await selectTab(ui, 'language-time')
       expect(await ui.find({ key: 'timestamp-enabled-toggle' })).toBeDefined()
       expect((await ui.find({ key: 'timestamp-format' }))?.props.value).toBe('HH:mm:ss')
       expect(await ui.find({ key: 'i18n-language-source' })).toBeDefined()
@@ -157,9 +157,11 @@ for (const surface of ['terminal', 'desktop'] as const) {
     world.loaded = false
     await openConfig($)
     const ui = await mountConfig($, surface)
+    await selectTab(ui, 'prompt-frame')
     await ui.input({ key: 'prompt-frame-title', text: '保留输入框配置', kind: 'change' })
+    await selectTab(ui, 'statusline')
     await ui.select({ key: 'statusline-position', value: 'below-prompt' })
-    await ui.press({ key: 'panel-language' })
+    await ui.select({ key: 'panel-language', value: 'zh' })
     expect((await ui.find({ key: 'statusline-position' }))?.props.value).toBe('below-prompt')
     expect(world.writes).toEqual([])
     await ui.press({ key: 'save-config' })
@@ -203,7 +205,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect((await ui.find({ key: 'statusline-display-mode' }))?.props.value).toBe('compact')
     await ui.select({ key: 'statusline-display-mode', value: 'full' })
     await ui.select({ key: 'statusline-position', value: 'below-prompt' })
-    await ui.press({ key: 'panel-language' })
+    await ui.select({ key: 'panel-language', value: 'zh' })
     expect((await ui.find({ key: 'statusline-display-mode' }))?.props.value).toBe('full')
     expect(world.writes).toEqual([])
     expect(JSON.parse(world.file).displayMode).toBeUndefined()
@@ -254,6 +256,7 @@ test('hides editable i18n controls when the mod is absent', async ($, on) => {
   world.loaded = false
   await openConfig($)
   const ui = await mountConfig($)
+  await selectTab(ui, 'language-time')
   expect(await ui.find({ key: 'i18n-language-source' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /i18n-mod is not loaded/ })).toBeDefined()
   expect(await ui.find({ key: 'save-config' })).toBeDefined()
@@ -265,6 +268,7 @@ test('shows policy-locked i18n as read-only', async ($, on) => {
   world.locked = true
   await openConfig($)
   const ui = await mountConfig($)
+  await selectTab(ui, 'language-time')
   expect(await ui.find({ key: 'i18n-language-source' })).toBeUndefined()
   expect(await ui.find({ key: 'i18n-language-preset' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /Locked by host policy: zh-CN/ })).toBeDefined()
@@ -277,6 +281,7 @@ for (const kind of ['change', 'submit'] as const) {
     const world = mockConfig(on)
     await openConfig($)
     const ui = await mountConfig($)
+    await selectTab(ui, 'language-time')
     const source = 'D:/Language packs/custom.json'
     await ui.input({ key: 'i18n-language-source', text: source, kind })
     expect(world.changes).toEqual([])
@@ -296,6 +301,7 @@ for (const value of ['zh-CN', 'en'] as const) {
     const world = mockConfig(on)
     await openConfig($)
     const ui = await mountConfig($)
+    await selectTab(ui, 'language-time')
     await ui.select({ key: 'i18n-language-preset', value })
     expect((await ui.find({ key: 'i18n-language-source' }))?.props.value).toBe(value)
     expect(world.changes).toEqual([])
@@ -310,6 +316,7 @@ test('keeps the source draft and avoids other writes when i18n validation fails'
   world.deny = 'Invalid JSON language pack'
   await openConfig($)
   const ui = await mountConfig($)
+  await selectTab(ui, 'language-time')
   await ui.input({ key: 'i18n-language-source', text: './bad.json', kind: 'change' })
   await ui.press({ key: 'save-config' })
   expect(world.writes).toEqual([])
@@ -323,6 +330,7 @@ test('rechecks policy locks before saving an already edited draft', async ($, on
   const world = mockConfig(on)
   await openConfig($)
   const ui = await mountConfig($)
+  await selectTab(ui, 'language-time')
   await ui.input({ key: 'i18n-language-source', text: 'en', kind: 'change' })
   world.locked = true
   await ui.press({ key: 'save-config' })
@@ -336,6 +344,7 @@ test('reloads the saved pack through the i18n command without changing settings'
   const world = mockConfig(on)
   await openConfig($)
   const ui = await mountConfig($)
+  await selectTab(ui, 'language-time')
   await ui.press({ key: 'i18n-reload' })
   expect(world.commands).toEqual(['reload'])
   expect(world.changes).toEqual([])
@@ -348,6 +357,7 @@ test('does not reload a different saved file while a source draft is pending', a
   const world = mockConfig(on)
   await openConfig($)
   const ui = await mountConfig($)
+  await selectTab(ui, 'language-time')
   await ui.input({ key: 'i18n-language-source', text: './new.json', kind: 'change' })
   await ui.press({ key: 'i18n-reload' })
   expect(world.commands).toEqual([])
@@ -359,11 +369,13 @@ test('discards unsaved source changes when the visual panel closes', async ($, o
   const world = mockConfig(on)
   await openConfig($)
   const ui = await mountConfig($)
+  await selectTab(ui, 'language-time')
   await ui.input({ key: 'i18n-language-source', text: './new.json', kind: 'change' })
   await ui.press({ key: 'close-config' })
   await ui.unmount()
   await openConfig($)
   const reopened = await mountConfig($)
+  await selectTab(reopened, 'language-time')
   expect((await reopened.find({ key: 'i18n-language-source' }))?.props.value).toBe('zh-CN')
   expect(world.changes).toEqual([])
   expect(world.writes).toEqual([])
@@ -375,6 +387,7 @@ test('reports partial persistence accurately when the file write fails after i18
   world.failFile = true
   await openConfig($)
   const ui = await mountConfig($)
+  await selectTab(ui, 'language-time')
   await ui.select({ key: 'i18n-language-preset', value: 'en' })
   await ui.press({ key: 'save-config' })
   expect(world.source).toBe('en')
@@ -392,6 +405,7 @@ test('discards just the language draft and allows reloading without closing the 
   const world = mockConfig(on)
   await openConfig($)
   const ui = await mountConfig($)
+  await selectTab(ui, 'language-time')
   await ui.input({ key: 'i18n-language-source', text: './new.json', kind: 'change' })
   await ui.press({ key: 'i18n-cancel' })
   expect((await ui.find({ key: 'i18n-language-source' }))?.props.value).toBe('zh-CN')
@@ -408,11 +422,12 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await openConfig($)
     const ui = await mountConfig($, surface)
     for (const value of ['en', 'zh-CN', 'en'] as const) {
+      await selectTab(ui, 'language-time')
       await ui.select({ key: 'i18n-language-preset', value })
       const selector = await ui.find({ key: 'i18n-language-preset' })
       expect(selector?.type).toBe('Select')
       expect(selector?.props.value).toBe(value)
-      expect((await ui.findAll({ type: 'Select' })).length).toBe(3)
+      expect((await ui.findAll({ type: 'Select' })).length).toBe(1)
       expect((await ui.find({ key: 'i18n-language-source' }))?.props.value).toBe(value)
       expect(world.changes).toEqual([])
       expect(world.writes).toEqual([])
@@ -429,12 +444,14 @@ test('represents an existing custom JSON source without replacing it with a pres
   world.source = source
   await openConfig($)
   const ui = await mountConfig($)
+  await selectTab(ui, 'language-time')
   const selector = await ui.find({ key: 'i18n-language-preset' })
   expect(selector?.props.value).toBe(source)
   const options = selector?.props.options as { value: string; label: string }[]
   expect(options.map(option => option.value)).toEqual(['zh-CN', 'en', source])
   expect(new Set(options.map(option => option.value)).size).toBe(options.length)
   expect(world.changes).toEqual([])
+  await selectTab(ui, 'language-time')
   await ui.select({ key: 'i18n-language-preset', value: 'en' })
   await ui.press({ key: 'i18n-cancel' })
   expect((await ui.find({ key: 'i18n-language-preset' }))?.props.value).toBe(source)
@@ -460,7 +477,7 @@ test('renders the interactive config pane', async ($, on) => {
   })
 
   expect(await ui.find({ type: 'Text', text: /CC Mods Configuration/ })).toBeDefined()
-  expect(await ui.find({ type: 'Button', text: /Language/ })).toBeDefined()
+  expect(await ui.find({ type: 'Select', key: 'panel-language' })).toBeDefined()
   expect(await ui.find({ type: 'Button', text: /Save configuration/ })).toBeDefined()
   await ui.unmount()
 })
@@ -472,8 +489,10 @@ for (const surface of ['terminal', 'desktop'] as const) {
     world.loaded = false
     await openConfig($)
     const ui = await mountConfig($, surface)
+    await selectTab(ui, 'prompt-frame')
     await ui.input({ key: 'prompt-frame-title', text: '独立配置', kind: 'change' })
-    await ui.press({ key: 'panel-language' })
+    await selectTab(ui, 'statusline')
+    await ui.select({ key: 'panel-language', value: 'zh' })
     await ui.press({ key: 'module-context-toggle' })
     await ui.press({ key: 'module-cwd-up' })
     expect(world.writes).toEqual([])
@@ -495,12 +514,16 @@ for (const surface of ['terminal', 'desktop'] as const) {
     world.file = JSON.stringify({ language: 'zh', promptFrame: { title: '已有标题' } })
     await openConfig($)
     const ui = await mountConfig($, surface)
+    await selectTab(ui, 'prompt-frame')
     expect((await ui.find({ key: 'prompt-frame-title' }))?.props.value).toBe('已有标题')
+    await selectTab(ui, 'statusline')
     expect((await ui.find({ key: 'statusline-display-mode' }))?.props.value).toBe('compact')
+    await selectTab(ui, 'prompt-frame')
     await ui.input({ key: 'prompt-frame-title', text: '未保存标题', kind: 'change' })
+    await selectTab(ui, 'statusline')
     await ui.select({ key: 'statusline-position', value: 'below-prompt' })
     await ui.select({ key: 'statusline-display-mode', value: 'full' })
-    await ui.press({ key: 'panel-language' })
+    await ui.select({ key: 'panel-language', value: 'zh' })
     await ui.press({ key: 'module-context-toggle' })
     await ui.press({ key: 'close-config' })
     await ui.unmount()
@@ -508,8 +531,10 @@ for (const surface of ['terminal', 'desktop'] as const) {
     const reopened = await mountConfig($, surface)
     expect((await reopened.find({ key: 'statusline-position' }))?.props.value).toBe('session-mode')
     expect((await reopened.find({ key: 'statusline-display-mode' }))?.props.value).toBe('compact')
+    await selectTab(reopened, 'prompt-frame')
     expect((await reopened.find({ key: 'prompt-frame-title' }))?.props.value).toBe('已有标题')
-    expect((await reopened.find({ key: 'panel-language' }))?.text).toBe('语言：中文')
+    await selectTab(reopened, 'statusline')
+    expect((await reopened.find({ key: 'panel-language' }))?.props.value).toBe('zh')
     expect((await reopened.find({ key: 'module-context-toggle' }))?.text).toBe('启用')
     expect(world.writes).toEqual([])
     await reopened.unmount()
@@ -521,14 +546,18 @@ for (const surface of ['terminal', 'desktop'] as const) {
     world.failFile = true
     await openConfig($)
     const ui = await mountConfig($, surface)
+    await selectTab(ui, 'prompt-frame')
     await ui.input({ key: 'prompt-frame-color', text: 'green', kind: 'change' })
+    await selectTab(ui, 'statusline')
     await ui.select({ key: 'statusline-position', value: 'below-prompt' })
     await ui.select({ key: 'statusline-display-mode', value: 'full' })
     await ui.press({ key: 'module-model-toggle' })
     await ui.press({ key: 'save-config' })
     expect(world.writes).toEqual([])
     expect(JSON.parse(world.file).displayMode).toBe('compact')
+    await selectTab(ui, 'prompt-frame')
     expect((await ui.find({ key: 'prompt-frame-color' }))?.props.value).toBe('green')
+    await selectTab(ui, 'statusline')
     expect((await ui.find({ key: 'statusline-position' }))?.props.value).toBe('below-prompt')
     expect((await ui.find({ key: 'statusline-display-mode' }))?.props.value).toBe('full')
     expect(world.toasts).toContain('Configuration save failed; draft preserved.')
