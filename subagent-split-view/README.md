@@ -8,6 +8,8 @@
 - thinking / text 流式输出
 - 工具调用参数摘要和执行结果
 - 多个正在运行的 Subagent 的状态
+- 点击任一 Subagent 标题查看该 Subagent 的完整 transcript
+- 在面板顶部点击 `↩ main` 返回主会话 transcript
 - Subagent 完成、失败、取消或终止后自动移除对应卡片
 - 没有运行中的 Subagent 后自动关闭分屏
 
@@ -31,7 +33,7 @@ Subagent 启动后会自动请求打开面板，也可以手动执行：
 /subagent-view clear
 ```
 
-面板使用 Claude Code 原生 `Pane`。全屏终端且宽度足够时显示在主会话右侧；终端较窄时会等待，执行 `/subagent-view` 或扩大终端后打开。
+面板使用 Claude Code 原生 `Pane`。全屏终端且宽度足够时显示在主会话右侧；终端较窄时会等待，执行 `/subagent-view` 或扩大终端后打开。点击 Subagent 标题会调用 Claude Code 2.1.300 的 `$.ui.view({ agentId })` 显示该 Agent 的主视图 transcript，点击面板顶部 `↩ main` 可返回主会话。
 
 ## 配置
 

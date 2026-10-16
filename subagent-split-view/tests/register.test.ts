@@ -60,6 +60,37 @@ test('removes a completed subagent panel and closes the pane', async ($, on) => 
   await ui.unmount()
 })
 
+test('renders agent detail and main transcript buttons', async ($, on) => {
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('command.register', () => ({ value: { command: 'subagent-view' } }))
+  on('agent.list', () => ({ value: [] }))
+  on('agent.spawn', () => ({ model: 'Test Model', agentId: 'agent-detail' }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+
+  await $.session.start({ cwd: '/work/project', surface: 'terminal', isInteractive: true })
+  await $.agent.spawn({ prompt: 'inspect the project', description: 'detail test' })
+  const ui = await $.ui.mount({
+    plugin: 'subagent-split-view',
+    surface: 'terminal',
+    component: 'Pane',
+    requestId: 'subagent-split-view',
+    props: {
+      title: 'Subagents',
+      isFocused: false,
+      bodyColumns: 72,
+      placement: 'dock',
+      scroll: { offset: 0, bodyRows: 30 },
+      view: {},
+    },
+  })
+
+  expect(await ui.find({ type: 'Button', key: 'view-agent-agent-detail' })).toBeDefined()
+  expect(await ui.find({ type: 'Button', key: 'view-main-transcript' })).toBeDefined()
+  await ui.press({ key: 'view-agent-agent-detail' })
+  await ui.press({ key: 'view-main-transcript' })
+  await ui.unmount()
+})
+
 test('renders the empty Subagent pane', async $ => {
   const ui = await $.ui.mount({
     plugin: 'subagent-split-view',

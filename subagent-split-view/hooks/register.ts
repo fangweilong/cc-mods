@@ -198,13 +198,35 @@ export function formatLogEntry(entry: LogEntry): string {
   return `${prefix[entry.kind]} ${entry.text}`
 }
 
+function switchMainView($: EngineInterface, agentId?: string): void {
+  try {
+    Promise.resolve($.ui.view(agentId ? { agentId } : {})).catch(() => {
+      $.ui.toast(agentId ? 'Unable to open the subagent transcript.' : 'Unable to return to the main transcript.')
+    })
+  } catch {
+    $.ui.toast(agentId ? 'Subagent transcript view is unavailable.' : 'Main transcript view is unavailable.')
+  }
+}
+
 function renderPanel($: EngineInterface, e: any): any {
-  const { Box, Text } = $.ui.resolve(e)
+  const { Box, Text, Button } = $.ui.resolve(e)
   const currentPanels = orderedPanels()
   const runningCount = currentPanels.filter(panel => ['running', 'working', 'in_progress'].includes(panel.info.status.toLowerCase())).length
   const children: any[] = [
-    Text({ color: COLORS.cyan, bold: true, children: [formatPanelHeader(panels.size, runningCount)] }),
-    Text({ color: COLORS.gray, children: ['Live output from each subagent. Esc closes this pane.'] }),
+    Box({
+      flexDirection: 'row',
+      gap: 1,
+      children: [
+        Text({ color: COLORS.cyan, weight: 'bold', children: [formatPanelHeader(panels.size, runningCount)] }),
+        Button({
+          key: 'view-main-transcript',
+          label: '↩ main',
+          plain: true,
+          onPress: () => switchMainView($),
+        }),
+      ],
+    }),
+    Text({ color: COLORS.gray, children: ['Click a subagent name to view its transcript.'] }),
   ]
 
   if (currentPanels.length === 0) {
@@ -229,7 +251,12 @@ function renderPanel($: EngineInterface, e: any): any {
       borderColor: statusColor(status),
       paddingX: 1,
       children: [
-        Text({ color: statusColor(status), bold: true, children: [title] }),
+        Button({
+          key: `view-agent-${panel.info.id}`,
+          plain: true,
+          onPress: () => switchMainView($, panel.info.id),
+          children: [Text({ color: statusColor(status), weight: 'bold', children: [title] })],
+        }),
         Text({ color: COLORS.gray, wrap: 'truncate-end', children: [`task: ${task || '(no description)'}`] }),
         Text({ color: COLORS.yellow, wrap: 'truncate-end', children: [`activity: ${panel.activity}`] }),
         ...logRows,
