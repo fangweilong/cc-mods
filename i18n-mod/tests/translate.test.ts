@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 import { ORIGINAL_PACK as en } from '../hooks/original'
 import { zhCN } from './fixtures'
-import { formatDuration, formatMessage, translateExact, translateHint } from '../hooks/translate'
+import { formatDuration, formatMessage, translateExact, translateHint, translateNotice } from '../hooks/translate'
 
 for (const [original, translated] of [
   ['? for shortcuts', '? 查看快捷键'],
@@ -32,6 +32,13 @@ test('preserves unknown hints, incomplete translations and arbitrary text', () =
   expect(translateExact('constructor', zhCN.notices)).toBe('constructor')
   expect(translateExact('__proto__', zhCN.notices)).toBe('__proto__')
   expect(translateExact('Welcome back!', zhCN.notices)).toBe('欢迎回来！')
+})
+
+test('matches notice prefixes and preserves dynamic suffixes', () => {
+  expect(translateNotice('Update available: 2.1.301', zhCN.notices)).toBe('有可用更新: 2.1.301')
+  expect(translateNotice('Update available for D:/work/project', zhCN.notices)).toBe('有可用更新 for D:/work/project')
+  expect(translateNotice('Update availableXYZ', zhCN.notices)).toBe('Update availableXYZ')
+  expect(translateNotice('Welcome back!', zhCN.notices)).toBe('欢迎回来！')
 })
 
 test('preserves values, unknown placeholders and inherited property names', () => {

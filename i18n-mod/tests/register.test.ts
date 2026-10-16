@@ -90,7 +90,7 @@ test('localizes known notices without changing slash commands or visibility', as
     text: '有可用更新', command: '/help', onScreen: null,
   })
   await ui.redraw({ text: 'Update available for D:/work/project', command: null })
-  expect(JSON.parse((await ui.find({ type: 'Text' }))!.text).text).toBe('Update available for D:/work/project')
+  expect(JSON.parse((await ui.find({ type: 'Text' }))!.text).text).toBe('有可用更新 for D:/work/project')
   await ui.unmount()
 })
 

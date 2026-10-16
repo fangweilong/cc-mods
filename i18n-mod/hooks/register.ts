@@ -3,7 +3,7 @@ import type { LanguageSelection } from '../types'
 import { DEFAULT_SOURCE, languageCodes, parseLanguagePack, resolveSource } from './language'
 import { ORIGINAL_SELECTION } from './original'
 import { DURATION_WORDS, SPINNER_WORDS } from './source'
-import { formatDuration, formatMessage, translateExact, translateHint } from './translate'
+import { formatDuration, formatMessage, translateExact, translateHint, translateNotice } from './translate'
 
 const selectionRef = { plugin: 'i18n-mod', key: 'selection' } as const
 
@@ -147,7 +147,7 @@ export const register: Register = (on, options) => {
         }) })
       }
       case 'InfoNotice': {
-        const text = translateExact(e.props.text, pack.notices)
+        const text = translateNotice(e.props.text, pack.notices)
         return text === e.props.text ? next(e) : next({ ...e, props: { ...e.props, text } })
       }
       case 'SessionMode': {

@@ -38,6 +38,27 @@ export function translateExact(text: string, entries?: Readonly<Record<string, s
   return entries && Object.prototype.hasOwnProperty.call(entries, text) ? entries[text] ?? text : text
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
+}
+
+/**
+ * 先精确匹配，再按已知通知文本的前缀匹配并保留动态后缀。
+ * 语言包只能提供普通文本键，不执行语言包中的正则，避免误匹配和正则注入。
+ */
+export function translateNotice(text: string, entries?: Readonly<Record<string, string>>): string {
+  const exact = translateExact(text, entries)
+  if (exact !== text || !entries) return exact
+
+  const candidates = Object.entries(entries).sort((left, right) => right[0].length - left[0].length)
+  for (const [prefix, translated] of candidates) {
+    if (!prefix || !translated) continue
+    const pattern = new RegExp(`^${escapeRegExp(prefix)}(?=$|[\\s:：])`, 'u')
+    if (pattern.test(text)) return `${translated}${text.slice(prefix.length)}`
+  }
+  return text
+}
+
 /** 使用回调替换占位符，保持动态值中的 $、反斜杠等字符不变。 */
 export function formatMessage(template: string, values: Readonly<Record<string, string>>): string {
   return template.replace(/\{(\w+)\}/g, (match, key: string) => Object.prototype.hasOwnProperty.call(values, key) ? values[key] ?? match : match)
