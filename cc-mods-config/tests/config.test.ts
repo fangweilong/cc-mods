@@ -132,11 +132,13 @@ for (const surface of ['terminal', 'desktop'] as const) {
 }
 
 test('normalizes timestamp settings and defaults legacy files', () => {
-  expect(DEFAULT_CONFIG.timestamp).toEqual({ enabled: true, format: 'HH:mm:ss' })
+  expect(DEFAULT_CONFIG.timestamp).toEqual({ enabled: true, format: 'HH:mm:ss', tps: true })
   expect(normalizeConfig({ timestamp: { enabled: false, format: 'YYYY-MM-DD HH:mm' } }).timestamp).toEqual({
     enabled: false,
     format: 'YYYY-MM-DD HH:mm',
+    tps: true,
   })
+  expect(normalizeConfig({ timestamp: { tps: false } }).timestamp.tps).toBe(false)
   expect(normalizeConfig({ timestamp: { enabled: 'false', format: '' } }).timestamp).toEqual(DEFAULT_CONFIG.timestamp)
   expect(normalizeConfig({}).timestamp).toEqual(DEFAULT_CONFIG.timestamp)
 })

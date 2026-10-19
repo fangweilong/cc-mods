@@ -42,6 +42,7 @@ export type I18nConfigDraft = {
 export type TimestampConfig = {
   enabled: boolean
   format: string
+  tps: boolean
 }
 
 declare module 'claude-code' {

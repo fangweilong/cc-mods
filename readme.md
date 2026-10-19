@@ -17,7 +17,7 @@ Claude Code Mod 集合，提供状态栏、Subagent 实时面板、用户输入�
 | 配置区域 | 可视化设置 |
 | --- | --- |
 | 状态栏与配置面板 | `en` / `zh` 显示语言、状态栏位置（现有位置 / 输入框下方）、显示模式（完整 / 简洁）、模块开关和顺序 |
-| 时间显示 | 插件启用开关、时间格式规则；显示用户消息发送时间及工具调用/结果时间 |
+| 时间显示 | 插件启用开关、TPS/Token 显示开关、时间格式规则；显示用户消息发送时间、工具调用耗时与 Token、每段回答的 TPS |
 | 用户输入框 | 标题、颜色、横竖线和四角符号 |
 | 原生界面语言（i18n） | 语言代码或 JSON 路径、简体中文/English 原生语言选择器、重新加载已保存的语言包、取消语言修改 |
 | Subagent 实时面板 | 当前自动工作，没有可调配置；打开/清理命令仍保留 |
@@ -36,7 +36,7 @@ Claude Code Mod 集合，提供状态栏、Subagent 实时面板、用户输入�
 | `statusline-mod/` | `statusline-mod` | 使用 Claude Code 原生 Mod UI 渲染两行状态区域，展示模型、会话状态、运行环境、Git 分支与增删统计、Context、Token、缓存命中、配额、成本和工作目录；同时显示运行中的 Subagent 摘要，不包含配置面板。 |
 | `subagent-split-view/` | `subagent-split-view` | 在 Claude Code 右侧打开实时 Subagent 面板，展示 Subagent 的名称、类型、模型、任务、当前活动、thinking/text 流、工具调用及执行结果；Subagent 全部结束后自动关闭面板。 |
 | `i18n-mod/` | `i18n-mod` | 汉化已开放的运行状态、耗时、快捷键、模式及部分提示；按需读取 JSON 语言包，支持简体中文与 English 原文模式，通过统一 `/my-cc-mods-config` 面板选择语言代码或文件路径；新增语言无需注册。 |
-| `timestamp-mod/` | `timestamp-mod` | 在用户消息上方、工具调用和工具结果前显示可配置格式的时间戳；通过统一配置面板控制启用状态与时间格式。 |
+| `timestamp-mod/` | `timestamp-mod` | 显示用户消息时间、工具调用耗时与该请求的 Token 用量，以及每段回答的实时/精确 TPS；通过统一配置面板控制启用状态、TPS 开关与时间格式。 |
 | `user-prompt-frame/` | `user-prompt-frame` | 为用户消息添加“用户输入”边框，按终端宽度自适应，并按终端显示宽度处理中文、英文和 Emoji 混排；任务通知、其他会话消息和 Agent 消息仍使用 Claude Code 默认渲染。 |
 
 ### 各 Mod 的边界
