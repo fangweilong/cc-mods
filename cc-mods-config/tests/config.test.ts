@@ -149,17 +149,76 @@ for (const surface of ['terminal', 'desktop'] as const) {
 }
 
 test('normalizes timestamp settings and defaults legacy files', () => {
-  expect(DEFAULT_CONFIG.timestamp).toEqual({ enabled: true, format: 'HH:mm:ss', tps: true })
+  expect(DEFAULT_CONFIG.timestamp).toEqual({ enabled: true, format: 'HH:mm:ss', tps: true, autoExpandToolGroups: false })
   expect(normalizeConfig({ timestamp: { enabled: false, format: 'YYYY-MM-DD HH:mm' } }).timestamp).toEqual({
     enabled: false,
     format: 'YYYY-MM-DD HH:mm',
     tps: true,
+    autoExpandToolGroups: false,
   })
   expect(normalizeConfig({ timestamp: { tps: false } }).timestamp.tps).toBe(false)
   expect(normalizeConfig({ timestamp: { enabled: 'false', format: '' } }).timestamp).toEqual(DEFAULT_CONFIG.timestamp)
   expect(normalizeConfig({}).timestamp).toEqual(DEFAULT_CONFIG.timestamp)
 })
 
+
+test('normalizes tool group expansion as an independent boolean and preserves native folding by default', () => {
+  for (const autoExpandToolGroups of [true, false]) {
+    expect(normalizeConfig({ timestamp: { enabled: false, tps: false, autoExpandToolGroups } }).timestamp).toEqual({
+      enabled: false, format: 'HH:mm:ss', tps: false, autoExpandToolGroups,
+    })
+  }
+  for (const autoExpandToolGroups of [undefined, null, 'true', 'false', 0, 1, [], {}]) {
+    expect(normalizeConfig({ timestamp: { autoExpandToolGroups } }).timestamp).toEqual(DEFAULT_CONFIG.timestamp)
+  }
+  for (const value of [undefined, null, {}, { timestamp: null }, { timestamp: { enabled: false, tps: false } }]) {
+    expect(normalizeConfig(value).timestamp.autoExpandToolGroups).toBe(false)
+  }
+})
+
+for (const surface of ['terminal', 'desktop'] as const) {
+  for (const language of ['en', 'zh'] as const) {
+    test(`stages, saves and reopens independent tool group expansion in ${language} on ${surface}`, async ($, on) => {
+      const world = mockConfig(on)
+      world.loaded = false
+      world.file = JSON.stringify({ language, timestamp: { enabled: false, format: 'HH:mm', tps: false } })
+      await openConfig($)
+      const ui = await mountConfig($, surface)
+      await selectTab(ui, 'language-time')
+      const toggle = 'timestamp-auto-expand-tool-groups-toggle'
+      expect((await ui.find({ key: toggle }))?.text).toBe(language === 'zh' ? '停用' : 'OFF')
+      expect(await ui.find({ type: 'Text', text: language === 'zh' ? '自动展开工具组：' : 'Auto-expand tool groups: ' })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: language === 'zh' ? /默认保留原生工具组折叠/ : /Native tool group folding is preserved by default/ })).toBeDefined()
+      await ui.press({ key: toggle })
+      expect((await ui.find({ key: toggle }))?.text).toBe(language === 'zh' ? '启用' : 'ON')
+      expect((await ui.find({ key: 'timestamp-enabled-toggle' }))?.text).toBe(language === 'zh' ? '停用' : 'OFF')
+      expect((await ui.find({ key: 'timestamp-tps-toggle' }))?.text).toBe(language === 'zh' ? '停用' : 'OFF')
+      await selectTab(ui, 'statusline')
+      await selectTab(ui, 'language-time')
+      expect((await ui.find({ key: toggle }))?.text).toBe(language === 'zh' ? '启用' : 'ON')
+      expect(world.writes).toEqual([])
+      expect(JSON.parse(world.file).timestamp.autoExpandToolGroups).toBeUndefined()
+      await ui.press({ key: 'save-config' })
+      expect(JSON.parse(world.writes[0]!).timestamp).toEqual({ enabled: false, format: 'HH:mm', tps: false, autoExpandToolGroups: true })
+      expect(world.paths).toEqual(['/test-home/.config/my-cc-mods/config.json'])
+      await ui.unmount()
+      await openConfig($)
+      const reopened = await mountConfig($, surface)
+      await selectTab(reopened, 'language-time')
+      expect((await reopened.find({ key: toggle }))?.text).toBe(language === 'zh' ? '启用' : 'ON')
+      await reopened.press({ key: toggle })
+      await reopened.press({ key: 'save-config' })
+      expect(JSON.parse(world.writes[1]!).timestamp).toEqual({ enabled: false, format: 'HH:mm', tps: false, autoExpandToolGroups: false })
+      expect(world.changes).toEqual([])
+      await reopened.unmount()
+      await openConfig($)
+      const restored = await mountConfig($, surface)
+      await selectTab(restored, 'language-time')
+      expect((await restored.find({ key: toggle }))?.text).toBe(language === 'zh' ? '停用' : 'OFF')
+      await restored.unmount()
+    })
+  }
+}
 
 test('normalizes statusline positions independently and defaults legacy files to the existing slot', () => {
   for (const position of ['session-mode', 'below-prompt'] as const) {
@@ -544,6 +603,8 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await ui.select({ key: 'statusline-display-mode', value: 'full' })
     await ui.select({ key: 'panel-language', value: 'zh' })
     await ui.press({ key: 'module-context-toggle' })
+    await selectTab(ui, 'language-time')
+    await ui.press({ key: 'timestamp-auto-expand-tool-groups-toggle' })
     await ui.press({ key: 'close-config' })
     await ui.unmount()
     await openConfig($)
@@ -555,6 +616,8 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await selectTab(reopened, 'statusline')
     expect((await reopened.find({ key: 'panel-language' }))?.props.value).toBe('zh')
     expect((await reopened.find({ key: 'module-context-toggle' }))?.text).toBe('启用')
+    await selectTab(reopened, 'language-time')
+    expect((await reopened.find({ key: 'timestamp-auto-expand-tool-groups-toggle' }))?.text).toBe('停用')
     expect(world.writes).toEqual([])
     await reopened.unmount()
   })
@@ -571,9 +634,13 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await ui.select({ key: 'statusline-position', value: 'below-prompt' })
     await ui.select({ key: 'statusline-display-mode', value: 'full' })
     await ui.press({ key: 'module-model-toggle' })
+    await selectTab(ui, 'language-time')
+    await ui.press({ key: 'timestamp-auto-expand-tool-groups-toggle' })
     await ui.press({ key: 'save-config' })
     expect(world.writes).toEqual([])
     expect(JSON.parse(world.file).displayMode).toBe('compact')
+    expect(JSON.parse(world.file).timestamp.autoExpandToolGroups).toBe(false)
+    expect((await ui.find({ key: 'timestamp-auto-expand-tool-groups-toggle' }))?.text).toBe('ON')
     await selectTab(ui, 'prompt-frame')
     expect((await ui.find({ key: 'prompt-frame-color' }))?.props.value).toBe('green')
     await selectTab(ui, 'statusline')
@@ -587,6 +654,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(saved.displayMode).toBe('full')
     expect(saved.promptFrame.color).toBe('green')
     expect(saved.modules.model).toBe(false)
+    expect(saved.timestamp.autoExpandToolGroups).toBe(true)
     await ui.unmount()
   })
 }

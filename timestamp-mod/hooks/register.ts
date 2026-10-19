@@ -1,10 +1,11 @@
 import type { EngineInterface, Register, RenderElement } from 'claude-code'
-import type { TimestampConfig, ToolUsage } from '../types'
+import type { TimestampConfig, ToolTiming, ToolUsage } from '../types'
 
 export const DEFAULT_CONFIG = {
   enabled: true,
   format: 'HH:mm:ss',
   tps: true,
+  autoExpandToolGroups: false,
 } as const
 
 const CONFIG_FILE = '.config/my-cc-mods/config.json'
@@ -12,10 +13,8 @@ const TIMESTAMP_COLOR = '#8791a0'
 const ESTIMATE_COLOR = '#ffd700'
 const STATUS_REDRAW_INTERVAL_MS = 500
 
-type ToolTiming = {
-  startedAt: number
-  finishedAt?: number
-}
+// 工具计时归宿主会话所有，避免热重载后展开旧工具时丢失。
+const TOOL_TIMINGS = { plugin: 'timestamp-mod', key: 'toolTimings' } as const
 
 type PendingUserTimestamp = {
   text: string
@@ -24,13 +23,10 @@ type PendingUserTimestamp = {
 
 let config: TimestampConfig = { ...DEFAULT_CONFIG }
 let configPath = ''
-const toolTimings = new Map<string, ToolTiming>()
 const userTimestamps = new Map<string, number>()
 const userTextTimestamps = new Map<string, number>()
 const pendingUserTimestamps: PendingUserTimestamp[] = []
 
-// 每个 step 的 usage 记到该 step 产生的工具调用上；同一 step 的多个工具共享这组值。
-const toolUsages = new Map<string, ToolUsage>()
 // 工具调用发生在所属 step 完成之后，因此 step 结束时先暂存，tool.call 到达时再归属。
 let lastStepUsage: ToolUsage | undefined
 let stepStartedAt: number | undefined
@@ -63,6 +59,7 @@ export function normalizeConfig(value: unknown): TimestampConfig {
     enabled: typeof data.enabled === 'boolean' ? data.enabled : DEFAULT_CONFIG.enabled,
     format: typeof data.format === 'string' && data.format.length > 0 ? data.format : DEFAULT_CONFIG.format,
     tps: typeof data.tps === 'boolean' ? data.tps : DEFAULT_CONFIG.tps,
+    autoExpandToolGroups: typeof data.autoExpandToolGroups === 'boolean' ? data.autoExpandToolGroups : DEFAULT_CONFIG.autoExpandToolGroups,
   }
 }
 
@@ -267,15 +264,18 @@ export const register: Register = on => {
 
   on('tool.call', async ($, e, next) => {
     if (!config.enabled) return next(e)
-    const timing: ToolTiming = { startedAt: await $.clock.now() }
-    toolTimings.set(e.tool_use_id, timing)
-    // 工具由上一 step 的响应产生，沿用该 step 的 usage。
-    if (turnActive && !e.agentId && lastStepUsage) toolUsages.set(e.tool_use_id, lastStepUsage)
+    // 工具由上一 step 的响应产生，同一 step 的多个工具共享这组用量。
+    const timing: ToolTiming = {
+      startedAt: await $.clock.now(),
+      ...(turnActive && !e.agentId && lastStepUsage ? { usage: lastStepUsage } : {}),
+    }
+    const ref = { ...TOOL_TIMINGS, id: e.tool_use_id }
+    await $.state.set(ref, timing)
     refresh($)
     try {
       return await next(e)
     } finally {
-      timing.finishedAt = await $.clock.now()
+      await $.state.set(ref, { ...timing, finishedAt: await $.clock.now() })
       refresh($)
     }
   })
@@ -348,7 +348,7 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'ToolGroup' }, async ($, e, next) => {
-    if (!config.enabled || e.props.isExpanded) return next(e)
+    if (!config.enabled || !config.autoExpandToolGroups || e.props.isExpanded) return next(e)
     return next({ ...e, props: { ...e.props, isExpanded: true } })
   })
 
@@ -387,19 +387,30 @@ export const register: Register = on => {
   on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
     const result = await next(e)
     if (!config.enabled) return result
-    const timing = toolTimings.get(e.props.tool_use_id)
+    const { value: timing } = await $.state.get({ ...TOOL_TIMINGS, id: e.props.tool_use_id })
     if (!timing) return result
-    const usage = config.tps ? toolUsages.get(e.props.tool_use_id) : undefined
-    const { Text } = $.ui.resolve(e)
+    const usage = config.tps ? timing.usage : undefined
+    const { Box, Text } = $.ui.resolve(e)
     const line = usage
       ? `${formatToolTiming(timing)} · ↑${formatTokenCount(usage.input)} ↓${formatTokenCount(usage.output)}`
       : formatToolTiming(timing)
-    return withHeader($, e, [Text({ color: TIMESTAMP_COLOR, children: [line] })], result, 1)
+    return Box({
+      flexDirection: 'column',
+      marginTop: 1,
+      children: [
+        result,
+        Box({
+          key: 'tool-timing-footer',
+          paddingLeft: 2,
+          children: [Text({ color: TIMESTAMP_COLOR, children: [`⏱ ${e.props.tool} · ${line}`] })],
+        }),
+      ],
+    })
   })
 }
 
 /**
- * 开始、结束、耗时合并为工具块顶部的一行，避免相邻工具的结束/开始行被误读为同一组。
+ * 开始、结束、耗时合并为一行，由工具块底部的具名时间行显示。
  */
 export function formatToolTiming(timing: ToolTiming): string {
   return formatTiming(timing)

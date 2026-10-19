@@ -52,6 +52,7 @@ export type TimestampConfig = {
   enabled: boolean
   format: string
   tps: boolean
+  autoExpandToolGroups: boolean
 }
 
 declare module 'claude-code' {

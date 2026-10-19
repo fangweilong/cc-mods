@@ -57,6 +57,7 @@ export const DEFAULT_CONFIG: StatusConfig = {
     enabled: true,
     format: 'HH:mm:ss',
     tps: true,
+    autoExpandToolGroups: false,
   },
 }
 
@@ -155,6 +156,7 @@ export function normalizeConfig(value: unknown): StatusConfig {
     if (typeof timestamp.enabled === 'boolean') result.timestamp.enabled = timestamp.enabled
     if (typeof timestamp.format === 'string' && timestamp.format.length > 0) result.timestamp.format = timestamp.format
     if (typeof timestamp.tps === 'boolean') result.timestamp.tps = timestamp.tps
+    if (typeof timestamp.autoExpandToolGroups === 'boolean') result.timestamp.autoExpandToolGroups = timestamp.autoExpandToolGroups
   }
 
   return result
@@ -583,6 +585,15 @@ async function renderConfigPane($: EngineInterface, e: any): Promise<any> {
           onPress: () => changeConfig($, latest => ({ ...latest, timestamp: { ...latest.timestamp, tps: !latest.timestamp.tps } })),
         }),
       ] }),
+      Box({ children: [
+        Text({ color: UI_COLORS.gray, children: [language === 'zh' ? '自动展开工具组：' : 'Auto-expand tool groups: '] }),
+        Button({
+          key: 'timestamp-auto-expand-tool-groups-toggle',
+          label: current.timestamp.autoExpandToolGroups ? enabled : disabled,
+          onPress: () => changeConfig($, latest => ({ ...latest, timestamp: { ...latest.timestamp, autoExpandToolGroups: !latest.timestamp.autoExpandToolGroups } })),
+        }),
+      ] }),
+      Text({ dimColor: true, children: [language === 'zh' ? '默认保留原生工具组折叠；自动展开仅在时间显示启用时生效，与 TPS / Token 开关无关。' : 'Native tool group folding is preserved by default; auto-expansion only applies when timestamps are enabled, regardless of TPS / tokens.'] }),
       Input({
         key: 'timestamp-format',
         label: language === 'zh' ? '时间格式' : 'Time format',
