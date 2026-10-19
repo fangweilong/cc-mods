@@ -19,12 +19,12 @@ Claude Code Mod 集合，提供状态栏、Subagent 实时面板、用户输入�
 | 状态栏与配置面板 | `en` / `zh` 显示语言、状态栏位置（现有位置 / 输入框下方）、显示模式（完整 / 简洁）、模块开关和顺序 |
 | 时间显示 | 插件启用开关、时间格式规则；显示用户消息发送时间及工具调用/结果时间 |
 | 用户输入框 | 标题、颜色、横竖线和四角符号 |
-| 原生界面语言（i18n） | 语言代码或 JSON 路径、简体中文/English 原生语言选择器、重新加载已保存的语言包、取消语言修改 |
+| 语言与时间 → i18n | 语言代码或 JSON 路径、简体中文/English 原生语言选择器、重新加载已保存的语言包；耗时行原生/自定义、显隐、顶部间距及取消草稿 |
 | Subagent 实时面板 | 当前自动工作，没有可调配置；打开/清理命令仍保留 |
 
 修改后使用面板底部的 **保存配置 / Save configuration**。i18n 路径相对 `i18n-mod` 目录解析；坏文件或策略拒绝会保留语言草稿并显示错误，不写入其他 Mod 配置。**重新加载语言包** 不保存草稿；先保存或取消语言修改再重载。
 
-入口统一，存储保持兼容：状态栏与输入框仍保存到 `~/.config/my-cc-mods/config.json`；i18n 通过宿主 `userConfig` 保存 `i18n-mod.language`，不在上述文件维护第二份语言设置。两个存储不是原子事务：若 i18n 已保存但后续文件写入失败，面板会明确提示部分保存失败，可重试保存。
+入口统一，存储保持兼容：状态栏与输入框仍保存到 `~/.config/my-cc-mods/config.json`；i18n 通过宿主 `userConfig` 保存 `i18n-mod.language` 及三个耗时行选项，不在上述文件维护第二份语言或耗时行设置。保存不是原子事务：语言来源、各耗时行配置、后续文件逐项保存；中途失败会报告部分成功并保留失败项与未尝试项的草稿，可重试保存。
 
 项目配置约定：后续新增的用户可调项也应接入这个可视化面板；Mod 的命令行配置入口和手动配置格式仅作为兼容/高级用法，不要求日常使用时分别配置各 Mod。
 
@@ -35,17 +35,17 @@ Claude Code Mod 集合，提供状态栏、Subagent 实时面板、用户输入�
 | `cc-mods-config/` | `cc-mods-config` | 独立的全仓库统一可视化配置面板，管理状态栏、输入框与 i18n 配置；不依赖任何功能 Mod。 |
 | `statusline-mod/` | `statusline-mod` | 使用 Claude Code 原生 Mod UI 渲染两行状态区域，展示模型、会话状态、运行环境、Git 分支与增删统计、Context、Token、缓存命中、配额、成本和工作目录；同时显示运行中的 Subagent 摘要，不包含配置面板。 |
 | `subagent-split-view/` | `subagent-split-view` | 在 Claude Code 右侧打开实时 Subagent 面板，展示 Subagent 的名称、类型、模型、任务、当前活动、thinking/text 流、工具调用及执行结果；Subagent 全部结束后自动关闭面板。 |
-| `i18n-mod/` | `i18n-mod` | 汉化已开放的运行状态、耗时、快捷键、模式及部分提示；按需读取 JSON 语言包，支持简体中文与 English 原文模式，通过统一 `/my-cc-mods-config` 面板选择语言代码或文件路径；新增语言无需注册。 |
+| `i18n-mod/` | `i18n-mod` | 汉化已开放的运行状态、快捷键、模式及部分提示；耗时默认原生，可手动启用中性自定义耗时行。按需读取 JSON 语言包，支持简体中文与 English 原文模式；通过统一 `/my-cc-mods-config` 面板选择语言及耗时设置，新增语言无需注册。 |
 | `timestamp-mod/` | `timestamp-mod` | 在用户消息上方、工具调用和工具结果前显示可配置格式的时间戳；通过统一配置面板控制启用状态与时间格式。 |
 | `user-prompt-frame/` | `user-prompt-frame` | 为用户消息添加“用户输入”边框，按终端宽度自适应，并按终端显示宽度处理中文、英文和 Emoji 混排；任务通知、其他会话消息和 Agent 消息仍使用 Claude Code 默认渲染。 |
 
 ### 各 Mod 的边界
 
-- `cc-mods-config` 独立提供统一配置面板，保存兼容配置文件；主动保存 i18n 时通过宿主配置 API 更新其语言选项，不直接改写 `settings.json`，不依赖其他 Mod 的状态。
+- `cc-mods-config` 独立提供统一配置面板，保存兼容配置文件；主动保存 i18n 时通过宿主配置 API 更新其语言和耗时行选项，不直接改写 `settings.json`，不依赖其他 Mod 的状态。
 - `statusline-mod` 只观察和渲染会话状态、读取配置，不注册配置面板命令、不写配置，也不覆盖原生 `statusLine` / `subagentStatusLine` 配置。
 - `timestamp-mod` 只观察用户提交、工具调用和工具结果并渲染时间戳；读取统一配置，不改变 Prompt、工具参数、工具结果或会话记录。
 - `subagent-split-view` 只观察和渲染 Subagent 事件，不创建 Agent、不修改 Agent 参数、不改变权限或工具执行结果；日志只保存在当前 Claude Code 进程内，每个 Agent 最多保留 120 条。
-- `i18n-mod` 只改变已开放的界面提示，不翻译会话内容、不调用模型；主动切换语言时通过宿主 `userConfig` 保存自己的语言选项。权限弹窗不在覆盖范围内；与 `statusline-mod` 同用时，原生快捷键提示仍被后者隐藏。
+- `i18n-mod` 只改变已开放的界面提示，不翻译会话内容、不调用模型；主动保存时通过宿主 `userConfig` 保存自己的语言和耗时行选项。耗时默认原生，自定义是独立契约，不等价于原生全部行为。权限弹窗不在覆盖范围内；与 `statusline-mod` 同用时，原生快捷键提示仍被后者隐藏。
 - `user-prompt-frame` 只改变符合用户输入条件的 `UserMessage` 渲染，不改变消息内容或会话行为。
 
 ## 环境要求
@@ -171,6 +171,7 @@ macOS/Linux 示例：
 │   ├── hooks/language.ts
 │   ├── hooks/source.ts
 │   ├── hooks/translate.ts
+│   ├── hooks/turn-duration.ts
 │   ├── locales/zh-CN.json
 │   ├── types/index.d.ts
 │   └── tests/
@@ -248,11 +249,32 @@ Subagent 启动后会自动尝试打开右侧面板，也可以手动打开：
 
 ### `i18n-mod`
 
-默认简体中文。打开 `/my-cc-mods-config`，在“原生界面语言（i18n）”区域填写语言代码或 JSON 路径，点击“保存配置”；编辑语言包文件后，通过同一区域的“重新加载语言包”按钮应用。
+界面语言默认简体中文，**回合耗时默认 `native`（原生）**，不会自动替换。打开 `/my-cc-mods-config` 的“语言与时间”页签，在“原生界面语言”区域填写语言代码或 JSON 路径，点击“保存配置”；编辑语言包文件后，通过同一区域的“重新加载语言包”按钮应用。
 
 新增语言只需提供 JSON 文件，不必修改注册表；只缓存当前包。English 原文模式和缺失译文保留原生文案，不改变用户输入、模型回复或工具结果。`/i18n`、`/config` 仍可作为高级兼容入口，日常配置无需使用它们。
 
-当前已接入 **6 类原生界面位置**：运行状态、回合耗时、输入框快捷提示、工具后台运行提示、模式标签和部分通知；另有 `/i18n` 自身的 10 条控制文案。完整数量及边界见 [当前已支持的 i18n](./i18n-mod/README.md#当前已支持的-i18n)。状态栏和配置面板自身的 `en` / `zh` 文案仍独立维护，不属于 i18n JSON 语言包；与 `statusline-mod` 同用时，原生输入框快捷提示仍被隐藏。新增语言包步骤和其他共存限制见 [i18n-mod/README.md](./i18n-mod/README.md)。
+当前提供 **5 类原生提示翻译**：运行状态、输入框快捷提示、工具后台运行提示、模式标签和部分通知；另有 **1 类可选自定义耗时行**，以及 `/i18n` 自身的 10 条控制文案。完整数量及边界见 [当前已支持的 i18n](./i18n-mod/README.md#当前已支持的-i18n)。状态栏和配置面板自身的 `en` / `zh` 文案仍独立维护，不属于 i18n JSON 语言包；与 `statusline-mod` 同用时，原生输入框快捷提示仍被隐藏。PromptHint 仅在无 `tail` 且整行片段均为已确认静态文本时翻译；含任务按钮、链接或未知片段时原样透传，不牺牲交互来强制汉化。
+
+#### 可选自定义耗时行（仅 terminal）
+
+同时加载 `cc-mods-config` 与 `i18n-mod`，在“语言与时间”页签：
+
+1. 将 i18n 语言设为简体中文（或含有效耗时模板的语言包）。
+2. 在“i18n-mod · 耗时行”将“耗时行模式”选为“自定义耗时行（`custom`）”，点击“保存配置”；内置模板示例为 `✻ 本轮用时 12m 38s`，不冒称后台全部完成。
+3. 用“自定义行可见性”显示/隐藏整行，用“自定义顶部间距”选择紧凑/留一行，保存后应用；选择只改草稿，“取消耗时行修改”丢弃该组草稿。
+4. 切回“原生（`native`）”并保存即可恢复宿主路径，无需改安装文件或重启会话；原生模式不应用自定义显隐和间距。
+
+| 实际宿主配置键 | 值域 | 默认值 |
+| --- | --- | --- |
+| `i18n-mod.turnDurationMode` | `native` / `custom` | `native` |
+| `i18n-mod.turnDurationVisible` | boolean：`true` / `false` | `true` |
+| `i18n-mod.turnDurationSpacing` | `compact`（顶部 0）/ `separated`（顶部 1） | `compact` |
+
+耗时语言唯一来源是 `i18n-mod.language`，不是面板自己的 `en` / `zh`。**English（`en`）始终交回原生**，即使设置了 custom 或隐藏也不应用自定义选项。语言包可选字段为 `"turnDuration": { "elapsed": "本轮用时 {duration}" }`；仅接受 `elapsed`，且存在时必须是含 `{duration}` 的字符串，只允许该占位符。省略命名空间/模板或使用空对象可加载，显示分支缺失模板则整行回退原生；显式空串、纯空白、非字符串及未知模板键/占位符拒绝加载，失败保留当前包。旧 `completed` / `duration` 仍兼容校验，但不用于新耗时行。自定义显示分支遇到负数或非有限耗时也回退原生；自定义隐藏分支优先于模板/耗时检查，不透传原生。
+
+自定义显隐独立，**不等同于原生隐藏开关**；v1 不提供原生结束时刻、后台等待/任务计数、预算/提醒、隐藏消息统计或原生自动间距。它只按公开耗时向下取整到秒，以 `d/h/m/s` 紧凑单位显示。需要完整宿主行为请切回 native。自定义直接返回整行树，会截断下游同位置 hook；原生/English/回退路径继续 `next(e)`，仍受其他 Mod 的链顺序影响，不保证覆盖其他 Mod。
+
+真实终端的默认原生、中文 custom、隐藏零占位、compact/separated、宽窄窗换行、离屏重绘、语言 reload/插件热重载、后台及切回原生仍未验收；fixture/静态树通过不等同原生集成验收。任务 7 按“文档已完成、验收待用户运行”记录，详见[实施计划](./docs/plans/2026-10-16-turn-duration-plan.md)；完整 schema、失败回退和共存说明见 [i18n-mod/README.md](./i18n-mod/README.md)。
 
 ### `user-prompt-frame`
 
@@ -341,6 +363,7 @@ cc-mods/
 │   ├── hooks/language.ts
 │   ├── hooks/source.ts
 │   ├── hooks/translate.ts
+│   ├── hooks/turn-duration.ts
 │   ├── locales/zh-CN.json
 │   ├── types/index.d.ts
 │   └── tests/
