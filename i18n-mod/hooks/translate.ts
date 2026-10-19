@@ -8,29 +8,48 @@ const HINT_RULES: readonly { pattern: RegExp; key: HintKey }[] = [
   { pattern: /^(.*?) to expand$/i, key: 'expand' },
   { pattern: /^(.*?) to collapse$/i, key: 'collapse' },
   { pattern: /^(.*?) for history$/i, key: 'history' },
-  { pattern: /^(.*?) to cycle modes?$/i, key: 'cycleMode' },
+  { pattern: /^(.*?) to cycle(?: modes?)?$/i, key: 'cycleMode' },
   { pattern: /^(.*?) to accept suggestion$/i, key: 'acceptSuggestion' },
 ]
 const KEY_BINDING = /^(?:\?|(?:ctrl|alt|shift|cmd|meta)\+[a-z0-9+]+|esc|escape|tab|enter|↑|↓|↑\/↓|up|down)$/i
+const HINT_SEPARATOR = /(\s*[·•|]\s*|\s{2,})/u
+// 已核对原生实现：这些确切文案是淡色 Text，不是任务按钮或链接。
+const PASSIVE_PROMPT_HINTS = new Set(['install gh for PR status', 'gh auth login for PR status', '← for agents'])
 
-/** 保留分隔符、括号和实际快捷键；未知片段与缺失译文原样返回。 */
+function matchHint(text: string) {
+  const match = /^(\s*)(\(?)(.*?)(\)?)(\s*)$/u.exec(text)
+  if (!match) return undefined
+  const [, leading, open, body = '', close, trailing] = match
+  if ((open === '(') !== (close === ')')) return undefined
+  for (const rule of HINT_RULES) {
+    const key = rule.pattern.exec(body)?.[1]
+    if (key && KEY_BINDING.test(key)) {
+      return { key: rule.key, prefix: `${leading}${open}${key} `, suffix: `${close}${trailing}` }
+    }
+  }
+  return undefined
+}
+
+/** 只翻译一个完整的已知快捷提示。 */
+export function translateSingleHint(text: string, pack: LanguagePack): string {
+  if (pack.preserveOriginal || /[\r\n]/u.test(text)) return text
+  const match = matchHint(text)
+  const translated = match && pack.hints?.[match.key]
+  return match && translated ? `${match.prefix}${translated}${match.suffix}` : text
+}
+
+/** 只有每一段都确认是静态文本时才改写整行，未知内容保守透传。 */
+export function translatePromptHint(text: string, pack: LanguagePack): string {
+  if (pack.preserveOriginal || /[\r\n]/u.test(text)) return text
+  const parts = text.split(HINT_SEPARATOR)
+  if (parts.some(part => !/^[\s·•|]*$/u.test(part) && !PASSIVE_PROMPT_HINTS.has(part.trim()) && !matchHint(part))) return text
+  return parts.map(part => translateSingleHint(part, pack)).join('')
+}
+
+/** 保留分隔符、括号和实际快捷键；供不会替换交互行的提示位置使用。 */
 export function translateHint(text: string, pack: LanguagePack): string {
   if (pack.preserveOriginal) return text
-  return text.split(/(\s*[·•|]\s*|\s{2,})/u).map(part => {
-    const match = /^(\s*)(\(?)(.*?)(\)?)(\s*)$/u.exec(part)
-    if (!match) return part
-    const [, leading, open, body = '', close, trailing] = match
-    if ((open === '(') !== (close === ')')) return part
-    for (const rule of HINT_RULES) {
-      const hit = rule.pattern.exec(body)
-      const key = hit?.[1]
-      const translated = pack.hints?.[rule.key]
-      if (key && KEY_BINDING.test(key) && translated) {
-        return `${leading}${open}${key} ${translated}${close}${trailing}`
-      }
-    }
-    return part
-  }).join('')
+  return text.split(HINT_SEPARATOR).map(part => translateSingleHint(part, pack)).join('')
 }
 
 /** 语言包只对精确匹配的文案负责，不对任意文本进行词语替换。 */
@@ -62,12 +81,4 @@ export function translateNotice(text: string, entries?: Readonly<Record<string, 
 /** 使用回调替换占位符，保持动态值中的 $、反斜杠等字符不变。 */
 export function formatMessage(template: string, values: Readonly<Record<string, string>>): string {
   return template.replace(/\{(\w+)\}/g, (match, key: string) => Object.prototype.hasOwnProperty.call(values, key) ? values[key] ?? match : match)
-}
-
-/** 耗时行沿用简洁单位，非有限或负数输入不输出错误数字。 */
-export function formatDuration(durationMs: number): string {
-  const seconds = Math.floor(Math.max(0, Number.isFinite(durationMs) ? durationMs : 0) / 1000)
-  if (seconds < 60) return `${seconds}s`
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`
-  return `${Math.floor(seconds / 3600)}h ${Math.floor(seconds % 3600 / 60)}m ${seconds % 60}s`
 }

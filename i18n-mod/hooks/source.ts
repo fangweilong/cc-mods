@@ -24,12 +24,3 @@ export const SPINNER_WORDS = new Set([
   'whistling', 'wibbling', 'wiggling', 'wishing', 'wobbling', 'wondering',
   'yawning', 'zooming',
 ])
-
-export const DURATION_WORDS = new Set([
-  'worked', 'thought', 'reasoned', 'processed', 'analyzed', 'computed',
-  'generated', 'cooked', 'baked', 'brewed', 'sauteed', 'sautéed',
-  'simmered', 'stewed', 'churned', 'crunched', 'noodled', 'cogitated',
-  'pondered', 'considered', 'contemplated', 'synthesized', 'crafted', 'composed',
-  'ruminated', 'deliberated', 'percolated', 'manifested', 'coalesced', 'unfurled',
-  'spun', 'whirred', 'wandered', 'hatched', 'tinkered', 'wrangled',
-])

@@ -6,7 +6,7 @@ const LANGUAGE_ID = /^[a-z]{2,8}(?:-[a-z0-9]{1,8})*$/i
 const HINT_KEYS: readonly HintKey[] = [
   'shortcuts', 'interrupt', 'background', 'expand', 'collapse', 'history', 'cycleMode', 'acceptSuggestion',
 ]
-const PACK_KEYS = ['id', 'name', 'running', 'completed', 'duration', 'hints', 'modes', 'notices', 'messages', 'command']
+const PACK_KEYS = ['id', 'name', 'running', 'completed', 'duration', 'turnDuration', 'hints', 'modes', 'notices', 'messages', 'command']
 
 function object(value: unknown, field: string): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${field}: expected an object`)
@@ -87,6 +87,18 @@ export function parseLanguagePack(content: string, expectedId?: string): Languag
   }
   if (pack.duration !== undefined && !pack.duration.includes('{duration}')) {
     throw new Error('duration: must include {duration}')
+  }
+  if (data.turnDuration !== undefined) {
+    const templates = object(data.turnDuration, 'turnDuration')
+    if (Object.keys(templates).some(key => key !== 'elapsed')) throw new Error('turnDuration: unknown template key')
+    pack.turnDuration = {}
+    if (templates.elapsed !== undefined) {
+      const elapsed = text(templates.elapsed, 'turnDuration.elapsed')
+      // 空模板不能自绘；语言包应省略 elapsed，让渲染方整行回退原生。
+      if (!elapsed.includes('{duration}')) throw new Error('turnDuration.elapsed: must include {duration}')
+      if (/[{}]/u.test(elapsed.replace(/\{duration\}/gu, ''))) throw new Error('turnDuration.elapsed: only {duration} is allowed')
+      pack.turnDuration.elapsed = elapsed
+    }
   }
   if (data.hints !== undefined) pack.hints = dictionary(data.hints, 'hints', HINT_KEYS)
   for (const key of ['modes', 'notices', 'messages'] as const) {

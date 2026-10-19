@@ -1,11 +1,13 @@
 import type { EngineInterface, Register } from 'claude-code'
-import type { LanguageSelection } from '../types'
+import type { LanguageSelection, TurnDurationConfig } from '../types'
 import { DEFAULT_SOURCE, languageCodes, parseLanguagePack, resolveSource } from './language'
 import { ORIGINAL_SELECTION } from './original'
-import { DURATION_WORDS, SPINNER_WORDS } from './source'
-import { formatDuration, formatMessage, translateExact, translateHint, translateNotice } from './translate'
+import { SPINNER_WORDS } from './source'
+import { formatMessage, translateExact, translateHint, translateNotice, translatePromptHint } from './translate'
+import { createTurnDurationViewModel, normalizeTurnDurationConfig, renderTurnDuration } from './turn-duration'
 
 const selectionRef = { plugin: 'i18n-mod', key: 'selection' } as const
+const turnDurationRef = { plugin: 'i18n-mod', key: 'turnDuration' } as const
 
 function reason(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -30,6 +32,11 @@ async function currentLanguage($: EngineInterface): Promise<LanguageSelection> {
   return value ?? ORIGINAL_SELECTION
 }
 
+async function currentTurnDuration($: EngineInterface): Promise<TurnDurationConfig> {
+  const { value } = await $.state.get(turnDurationRef)
+  return value ?? normalizeTurnDurationConfig()
+}
+
 async function activate($: EngineInterface, selection: LanguageSelection): Promise<void> {
   await $.state.set(selectionRef, selection)
   await $.command.register({
@@ -48,6 +55,8 @@ export const register: Register = (on, options) => {
   // 候选包只在保存期间暂存，避免宿主再次派发 config.set 时重复读取；不作为语言缓存。
   let pendingSelection: LanguageSelection | undefined
   on('session.start', async ($, e, next) => {
+    // 每次 activation（含热重载）以宿主 options 重建，而不是保留模块内的配置副本。
+    await $.state.set(turnDurationRef, normalizeTurnDurationConfig(options))
     let selection = await currentLanguage($)
     try {
       selection = await loadLanguage($, options.language ?? DEFAULT_SOURCE)
@@ -57,6 +66,29 @@ export const register: Register = (on, options) => {
     await activate($, selection)
     return next(e)
   })
+
+  on('config.set', { key: [
+    'i18n-mod.turnDurationMode', 'i18n-mod.turnDurationVisible', 'i18n-mod.turnDurationSpacing',
+  ] }, async ($, e, next) => {
+    const valid = e.key === 'i18n-mod.turnDurationMode'
+      ? e.value === 'native' || e.value === 'custom'
+      : e.key === 'i18n-mod.turnDurationVisible'
+        ? typeof e.value === 'boolean'
+        : e.value === 'compact' || e.value === 'separated'
+    if (!valid) return { deny: 'Invalid turn duration configuration value' }
+    const saved = await next(e)
+    if (saved.deny === undefined) {
+      // 保存期间其他字段可能已更新；只用宿主最终值替换本次字段。
+      const current = await currentTurnDuration($)
+      await $.state.set(turnDurationRef, normalizeTurnDurationConfig({
+        turnDurationMode: current.mode,
+        turnDurationVisible: current.visible,
+        turnDurationSpacing: current.spacing,
+        [e.key.slice('i18n-mod.'.length)]: saved.value,
+      }))
+    }
+    return saved
+  }).catch(($, e, next) => next.called ? next(e) : { deny: 'Turn duration configuration validation failed' })
 
   // /config 修改前验证文件；自己的命令已验证候选包，跳过重复读取。
   on('config.set', { key: 'i18n-mod.language' }, async ($, e, next) => {
@@ -126,25 +158,24 @@ export const register: Register = (on, options) => {
     }) }
   })
 
-  on('ui.render', { component: ['Spinner', 'TurnDuration', 'InfoNotice', 'SessionMode', 'PromptHint', 'ToolProgress'] }, async ($, e, next) => {
+  on('ui.render', { component: ['Spinner', 'InfoNotice', 'SessionMode', 'PromptHint', 'ToolProgress', 'TurnDuration'] }, async ($, e, next) => {
     const { pack } = await currentLanguage($)
     if (pack.preserveOriginal) return next(e)
 
     switch (e.component) {
+      case 'TurnDuration': {
+        // 仅耗时组件订阅独立配置；不从 word/onScreen 推断原生隐藏、后台状态或统计。
+        const config = await currentTurnDuration($)
+        const model = createTurnDurationViewModel(e.props.durationMs, pack.turnDuration?.elapsed, config)
+        const tree = renderTurnDuration(model)
+        return tree === undefined ? next(e) : tree
+      }
       case 'Spinner': {
         const word = SPINNER_WORDS.has(e.props.word.toLowerCase()) && pack.running ? pack.running : e.props.word
         const message = e.props.message === null ? null : translateExact(e.props.message, pack.messages)
         return word === e.props.word && message === e.props.message
           ? next(e)
           : next({ ...e, props: { ...e.props, word, message } })
-      }
-      case 'TurnDuration': {
-        if (!DURATION_WORDS.has(e.props.word.toLowerCase()) || !pack.completed || !pack.duration) return next(e)
-        const { Text } = $.ui.resolve(e)
-        return Text({ dimColor: true, children: formatMessage(pack.duration, {
-          word: pack.completed,
-          duration: formatDuration(e.props.durationMs),
-        }) })
       }
       case 'InfoNotice': {
         const text = translateNotice(e.props.text, pack.notices)
@@ -157,7 +188,9 @@ export const register: Register = (on, options) => {
           : next({ ...e, props: { ...e.props, modes } })
       }
       case 'PromptHint': {
-        const hint = translateHint(e.props.hint, pack)
+        // 改写 hint 会替换原生整行及 tail；仅允许已确认的纯文本组合。
+        if (e.props.tail !== undefined) return next(e)
+        const hint = translatePromptHint(e.props.hint, pack)
         return hint === e.props.hint ? next(e) : next({ ...e, props: { ...e.props, hint } })
       }
       case 'ToolProgress': {

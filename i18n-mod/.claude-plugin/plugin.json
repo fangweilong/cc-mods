@@ -12,6 +12,26 @@
       "title": "UI language / JSON language pack",
       "description": "Language code or JSON file path; relative paths resolve under this plugin. en preserves the original UI.",
       "default": "zh-CN"
+    },
+    "turnDurationMode": {
+      "type": "string",
+      "title": "Turn duration mode",
+      "description": "Native preserves the host footer. Custom uses an independent elapsed-time line without native completion time or statistics.",
+      "options": ["native", "custom"],
+      "default": "native"
+    },
+    "turnDurationVisible": {
+      "type": "boolean",
+      "title": "Show custom turn duration",
+      "description": "Only controls the custom elapsed-time line; does not change the host's native visibility setting.",
+      "default": true
+    },
+    "turnDurationSpacing": {
+      "type": "string",
+      "title": "Custom turn duration spacing",
+      "description": "Compact adds no top margin; separated adds one row. Only applies in custom mode.",
+      "options": ["compact", "separated"],
+      "default": "compact"
     }
   }
 }

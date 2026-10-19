@@ -4,6 +4,9 @@
   "running": "处理中",
   "completed": "已完成",
   "duration": "{word}，用时 {duration}",
+  "turnDuration": {
+    "elapsed": "本轮用时 {duration}"
+  },
   "hints": {
     "shortcuts": "查看快捷键",
     "interrupt": "中断",

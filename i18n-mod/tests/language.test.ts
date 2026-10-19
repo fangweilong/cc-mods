@@ -62,6 +62,83 @@ for (const value of [
   })
 }
 
+test('loads the optional turn-duration elapsed template without changing legacy fields', () => {
+  const pack = parseLanguagePack(JSON.stringify({
+    ...ZH_DATA,
+    turnDuration: { elapsed: '本轮用时 {duration}（{duration}）' },
+  }))
+  expect(pack).toEqual({
+    ...parseLanguagePack(JSON.stringify(ZH_DATA)),
+    turnDuration: { elapsed: '本轮用时 {duration}（{duration}）' },
+  })
+})
+
+test('loads legacy packs without mapping completed or duration into turnDuration', () => {
+  const pack = parseLanguagePack(JSON.stringify(ZH_DATA))
+  expect(pack.completed).toBe(ZH_DATA.completed)
+  expect(pack.duration).toBe(ZH_DATA.duration)
+  expect(Object.prototype.hasOwnProperty.call(pack, 'turnDuration')).toBe(false)
+})
+
+test('allows a missing elapsed template for whole-line native fallback without legacy mapping', () => {
+  expect(parseLanguagePack(JSON.stringify({ ...ZH_DATA, turnDuration: {} }))).toEqual({
+    ...parseLanguagePack(JSON.stringify(ZH_DATA)),
+    turnDuration: {},
+  })
+})
+
+for (const turnDuration of [null, [], '本轮用时 {duration}', false, 42]) {
+  test(`rejects a non-object turnDuration namespace ${JSON.stringify(turnDuration)}`, () => {
+    expect(() => parseLanguagePack(JSON.stringify({ ...JA_DATA, turnDuration }))).toThrow('turnDuration: expected an object')
+  })
+}
+
+for (const elapsed of [null, [], {}, false, 42]) {
+  test(`rejects a non-string elapsed template ${JSON.stringify(elapsed)}`, () => {
+    expect(() => parseLanguagePack(JSON.stringify({ ...JA_DATA, turnDuration: { elapsed } }))).toThrow('turnDuration.elapsed: expected a string')
+  })
+}
+
+for (const elapsed of ['', ' \t\n', '本轮用时', '{word}', 'secret-template']) {
+  test(`rejects an elapsed template without duration ${JSON.stringify(elapsed)}`, () => {
+    expect(() => parseLanguagePack(JSON.stringify({ ...JA_DATA, turnDuration: { elapsed } }))).toThrow('turnDuration.elapsed: must include {duration}')
+  })
+}
+
+for (const elapsed of [
+  '{duration} {word}', '{duration} {doneAt}', '{duration} {budget}', '{duration} { duration }',
+  '{duration} ${secret-expression}', '{{duration}}', '{duration} {', '{duration} }',
+]) {
+  test(`rejects unknown or malformed elapsed placeholders ${JSON.stringify(elapsed)}`, () => {
+    expect(() => parseLanguagePack(JSON.stringify({ ...JA_DATA, turnDuration: { elapsed } }))).toThrow('turnDuration.elapsed: only {duration} is allowed')
+  })
+}
+
+for (const code of [0, 8, 11, 12, 27, 31, 127]) {
+  test(`rejects unsafe control character ${code} in elapsed templates`, () => {
+    const elapsed = `secret-template {duration}${String.fromCharCode(code)}`
+    expect(() => parseLanguagePack(JSON.stringify({ ...JA_DATA, turnDuration: { elapsed } }))).toThrow('turnDuration.elapsed: control characters are not allowed')
+  })
+}
+
+for (const key of ['doneAt', 'budget', 'waiting', 'completed', '__proto__', 'secret-file-content']) {
+  test(`rejects unsupported turn-duration template keys without disclosing them: ${key}`, () => {
+    const turnDuration = { elapsed: '本轮用时 {duration}', [key]: 'secret-template' }
+    expect(() => parseLanguagePack(JSON.stringify({ ...JA_DATA, turnDuration }))).toThrow('turnDuration: unknown template key')
+  })
+}
+
+test('keeps legacy completed and duration validation even when elapsed is valid', () => {
+  for (const fields of [
+    { completed: false }, { completed: `secret${String.fromCharCode(27)}` },
+    { duration: [] }, { duration: '{word}' }, { duration: `{duration}${String.fromCharCode(0)}` },
+  ]) {
+    expect(() => parseLanguagePack(JSON.stringify({
+      ...JA_DATA, ...fields, turnDuration: { elapsed: '本轮用时 {duration}' },
+    }))).toThrow()
+  }
+})
+
 test('rejects mismatched ids and hides source content in JSON syntax errors', () => {
   expect(() => parseLanguagePack(JSON.stringify(JA_DATA), 'de')).toThrow()
   expect(() => parseLanguagePack('{ secret-token')).toThrow('Invalid JSON')

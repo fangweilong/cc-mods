@@ -19,6 +19,9 @@ export const ZH_DATA = {
 }
 export const zhCN = parseLanguagePack(JSON.stringify(ZH_DATA))
 export const JA_DATA = { id: 'ja', name: '日本語', hints: { shortcuts: 'ショートカット' } }
+// 自定义耗时行使用独立 fixture；保留上面的旧 schema fixture 以覆盖无模板兼容。
+export const ZH_DURATION_DATA = { ...ZH_DATA, turnDuration: { elapsed: '本轮用时 {duration}' } }
+export const JA_DURATION_DATA = { id: 'ja', name: '日本語', turnDuration: { elapsed: 'このターンの所要時間 {duration}' } }
 
 export function mockWorld(on: On) {
   const world = {
