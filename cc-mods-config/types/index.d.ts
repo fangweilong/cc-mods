@@ -39,6 +39,15 @@ export type I18nConfigDraft = {
   error: string
 }
 
+export type TurnDurationConfigDraft = {
+  values: {
+    turnDurationMode?: 'native' | 'custom'
+    turnDurationVisible?: boolean
+    turnDurationSpacing?: 'compact' | 'separated'
+  }
+  error: string
+}
+
 export type TimestampConfig = {
   enabled: boolean
   format: string
@@ -49,6 +58,7 @@ declare module 'claude-code' {
     'cc-mods-config': {
       config: StatuslineConfig & { timestamp: TimestampConfig }
       i18nDraft: I18nConfigDraft
+      turnDurationDraft: TurnDurationConfigDraft
     }
   }
 }

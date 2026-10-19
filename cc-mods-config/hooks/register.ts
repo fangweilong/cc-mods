@@ -1,6 +1,6 @@
 import { atom, read, update } from 'claude-code'
 import type { ConfigRow, EngineInterface, Register } from 'claude-code'
-import type { I18nConfigDraft, StatuslineConfig, StatuslineDisplayMode, StatuslineModule, StatuslinePosition, TimestampConfig } from '../types'
+import type { I18nConfigDraft, StatuslineConfig, StatuslineDisplayMode, StatuslineModule, StatuslinePosition, TimestampConfig, TurnDurationConfigDraft } from '../types'
 
 const UI_COLORS = { cyan: '#50c8ff', red: '#ff5a64', gray: '#8791a0' } as const
 
@@ -61,6 +61,9 @@ export const DEFAULT_CONFIG: StatusConfig = {
 
 const configAtom = atom({ plugin: 'cc-mods-config', key: 'config' } as const, cloneConfig(DEFAULT_CONFIG))
 const i18nDraftAtom = atom({ plugin: 'cc-mods-config', key: 'i18nDraft' } as const, { source: null, error: '' } as I18nConfigDraft)
+
+const turnDurationDraftAtom = atom({ plugin: 'cc-mods-config', key: 'turnDurationDraft' } as const, { values: {}, error: '' } as TurnDurationConfigDraft)
+const TURN_DURATION_FIELDS = ['turnDurationMode', 'turnDurationVisible', 'turnDurationSpacing'] as const
 
 const CONFIG_PANE = 'my-cc-mods-config'
 type ConfigTab = 'statusline' | 'prompt-frame' | 'language-time' | 'subagents'
@@ -200,11 +203,29 @@ async function resetI18nDraft($: EngineInterface): Promise<void> {
   await update($, i18nDraftAtom, () => ({ source: null, error: '' }))
 }
 
+async function resetTurnDurationDraft($: EngineInterface): Promise<void> {
+  await update($, turnDurationDraftAtom, () => ({ values: {}, error: '' }))
+}
+
+function turnDurationRow(rows: ConfigRow[], field: typeof TURN_DURATION_FIELDS[number]): ConfigRow | undefined {
+  return rows.find(row => row.key === `i18n-mod.${field}` && (field === 'turnDurationVisible'
+    ? row.kind === 'boolean' && typeof row.value === 'boolean'
+    : row.kind === 'choice' && (field === 'turnDurationMode'
+      ? row.value === 'native' || row.value === 'custom'
+      : row.value === 'compact' || row.value === 'separated')))
+}
+
+function partialSaveMessage(language: Language, saved: string[], failure: string): string {
+  return language === 'zh'
+    ? `部分保存：已保存 ${saved.join(', ')}；${failure}。失败及剩余草稿已保留，请重试。`
+    : `Partial save: saved ${saved.join(', ')}; ${failure}. Failed and remaining drafts preserved; retry saving.`
+}
+
 async function saveCurrentConfig($: EngineInterface): Promise<void> {
   const current = draftConfig ?? await read($, configAtom)
   const savedConfig = cloneConfig(current ?? config)
   const i18nDraft = await read($, i18nDraftAtom)
-  let i18nSaved = false
+  const savedKeys: string[] = []
   // 先走宿主的 i18n 校验和锁定策略；失败不写入其他 Mod 的配置文件。
   if (i18nDraft.source !== null) {
     try {
@@ -213,11 +234,42 @@ async function saveCurrentConfig($: EngineInterface): Promise<void> {
       if (row.isLocked) throw new Error('The i18n language is locked by host policy.')
       const saved = await $.config.set({ key: row.key, value: i18nDraft.source })
       if (saved.deny !== undefined) throw new Error(saved.deny)
-      i18nSaved = true
+      savedKeys.push(row.key)
       await resetI18nDraft($)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       await update($, i18nDraftAtom, draft => ({ ...draft, error: message }))
+      $.ui.toast(message)
+      return
+    }
+  }
+  const durationDraft = await read($, turnDurationDraftAtom)
+  await update($, turnDurationDraftAtom, draft => ({ ...draft, error: '' }))
+  for (const field of TURN_DURATION_FIELDS) {
+    const value = durationDraft.values[field]
+    if (value === undefined) continue
+    const key = `i18n-mod.${field}`
+    try {
+      // 每项保存前重新检查真实可见行和锁；不把多次 set 伪装成原子事务。
+      const row = turnDurationRow(await $.config.list(), field)
+      if (!row) throw new Error('configuration row unavailable; load/update i18n-mod.')
+      if (row.isLocked) throw new Error('Locked by host policy.')
+      const saved = await $.config.set({ key: row.key, value })
+      if (saved.deny !== undefined) throw new Error(saved.deny)
+      savedKeys.push(row.key)
+      // 只清除成功项；重绘从宿主配置行读取最终值，而不是继续展示提交的草稿。
+      await update($, turnDurationDraftAtom, draft => {
+        const values = { ...draft.values }
+        delete values[field]
+        return { values, error: '' }
+      })
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      const failure = `${key}: ${reason}`
+      const message = savedKeys.length > 0
+        ? partialSaveMessage(savedConfig.language, savedKeys, failure)
+        : (savedConfig.language === 'zh' ? `${failure}；保存失败，草稿已保留。` : `${failure}; save failed, drafts preserved.`)
+      await update($, turnDurationDraftAtom, draft => ({ ...draft, error: message }))
       $.ui.toast(message)
       return
     }
@@ -230,9 +282,11 @@ async function saveCurrentConfig($: EngineInterface): Promise<void> {
     await update($, configAtom, () => cloneConfig(config))
     $.ui.toast(config.language === 'zh' ? '配置已保存。' : 'Configuration saved.')
   } catch {
-    $.ui.toast(i18nSaved
-      ? (savedConfig.language === 'zh' ? 'i18n 已保存，但状态栏/输入框配置保存失败，请重试。' : 'i18n saved, but statusline/prompt-frame save failed; retry saving.')
-      : (savedConfig.language === 'zh' ? '配置保存失败，草稿已保留。' : 'Configuration save failed; draft preserved.'))
+    $.ui.toast(savedKeys.some(key => key !== 'i18n-mod.language')
+      ? partialSaveMessage(savedConfig.language, savedKeys, savedConfig.language === 'zh' ? '状态栏/输入框配置保存失败' : 'statusline/prompt-frame save failed')
+      : savedKeys.length > 0
+        ? (savedConfig.language === 'zh' ? 'i18n 已保存，但状态栏/输入框配置保存失败，请重试。' : 'i18n saved, but statusline/prompt-frame save failed; retry saving.')
+        : (savedConfig.language === 'zh' ? '配置保存失败，草稿已保留。' : 'Configuration save failed; draft preserved.'))
   }
 }
 
@@ -296,12 +350,14 @@ async function renderConfigPane($: EngineInterface, e: any): Promise<any> {
   const close = language === 'zh' ? '关闭' : 'Close'
   const save = language === 'zh' ? '保存配置' : 'Save configuration'
   const i18nDraft = await read($, i18nDraftAtom)
-  let i18nRow: ConfigRow | undefined
+  const durationDraft = await read($, turnDurationDraftAtom)
+  let rows: ConfigRow[] = []
   try {
-    i18nRow = await i18nConfigRow($)
+    rows = await $.config.list()
   } catch {
     // 独立加载配置插件或宿主未提供 i18n 配置时，其他设置仍可使用。
   }
+  const i18nRow = rows.find(row => row.key === 'i18n-mod.language' && typeof row.value === 'string')
   const i18nSource = i18nDraft.source ?? String(i18nRow?.value ?? '')
   const i18nControls = !i18nRow
     ? [Text({ dimColor: true, children: [language === 'zh' ? 'i18n-mod 未加载；加载后可在这里设置界面语言。' : 'i18n-mod is not loaded; load it to configure the UI language here.'] })]
@@ -342,6 +398,42 @@ async function renderConfigPane($: EngineInterface, e: any): Promise<any> {
         ] }),
       ]
   if (i18nDraft.error) i18nControls.push(Text({ color: UI_COLORS.red, children: [i18nDraft.error] }))
+  const durationOptions = {
+    turnDurationMode: [
+      { value: 'native', label: language === 'zh' ? '原生' : 'Native' },
+      { value: 'custom', label: language === 'zh' ? '自定义耗时行' : 'Custom duration line' },
+    ],
+    turnDurationVisible: [
+      { value: 'true', label: language === 'zh' ? '显示' : 'Show' },
+      { value: 'false', label: language === 'zh' ? '隐藏' : 'Hide' },
+    ],
+    turnDurationSpacing: [
+      { value: 'compact', label: language === 'zh' ? '紧凑' : 'Compact' },
+      { value: 'separated', label: language === 'zh' ? '留一行' : 'One blank line' },
+    ],
+  }
+  const durationLabels = {
+    turnDurationMode: { key: 'turn-duration-mode', label: language === 'zh' ? '耗时行模式' : 'Duration line mode' },
+    turnDurationVisible: { key: 'turn-duration-visible', label: language === 'zh' ? '自定义行可见性' : 'Custom line visibility' },
+    turnDurationSpacing: { key: 'turn-duration-spacing', label: language === 'zh' ? '自定义顶部间距' : 'Custom top spacing' },
+  }
+  const durationControls = TURN_DURATION_FIELDS.map(field => {
+    const row = turnDurationRow(rows, field)
+    const key = `i18n-mod.${field}`
+    if (!row) return Text({ dimColor: true, children: [language === 'zh'
+      ? `${key} 配置行不可用；请加载或更新 i18n-mod。`
+      : `${key} unavailable; load or update i18n-mod.`] })
+    if (row.isLocked) return Text({ dimColor: true, children: [`${key} · ${language === 'zh' ? '宿主策略已锁定' : 'Locked by host policy'}: ${String(row.value)}`] })
+    return Select({
+      ...durationLabels[field],
+      value: String(durationDraft.values[field] ?? row.value),
+      options: durationOptions[field],
+      onSelect: (value: string) => update($, turnDurationDraftAtom, draft => ({
+        values: { ...draft.values, [field]: field === 'turnDurationVisible' ? value === 'true' : value },
+        error: '',
+      })),
+    })
+  })
   const frameFields = [
     ['title', language === 'zh' ? '标题' : 'Title'],
     ['color', language === 'zh' ? '边框颜色' : 'Border color'],
@@ -463,6 +555,14 @@ async function renderConfigPane($: EngineInterface, e: any): Promise<any> {
     children: [
       Text({ key: 'i18n-config-heading', color: UI_COLORS.cyan, weight: 'bold', children: [language === 'zh' ? 'i18n-mod · 原生界面语言' : 'i18n-mod · Native UI language'] }),
       ...i18nControls,
+      Text({ key: 'turn-duration-heading', color: UI_COLORS.cyan, weight: 'bold', children: [language === 'zh' ? 'i18n-mod · 耗时行' : 'i18n-mod · Turn duration'] }),
+      Text({ dimColor: true, children: [language === 'zh'
+        ? '自定义模式使用独立显隐；v1 不显示原生结束时刻、后台等待和预算等统计。需要完整原生行为请切回 native。English 原文始终使用原生。语言沿用上方 i18n 来源。'
+        : 'Custom mode uses independent visibility; v1 has no native end time, background waiting or budget statistics. For full native behavior switch back to native. English original always uses native. Language follows the i18n source above.'] }),
+      ...durationControls,
+      Text({ dimColor: true, children: [language === 'zh' ? '保存配置后生效；多项逐项保存，失败时保留剩余草稿。' : 'Apply with Save configuration; fields save individually, preserving remaining drafts on failure.'] }),
+      Button({ key: 'turn-duration-cancel', label: language === 'zh' ? '取消耗时行修改' : 'Discard duration changes', onPress: () => resetTurnDurationDraft($) }),
+      ...(durationDraft.error ? [Text({ key: 'turn-duration-error', color: UI_COLORS.red, children: [durationDraft.error] })] : []),
       Text({ key: 'timestamp-config-heading', color: UI_COLORS.cyan, weight: 'bold', children: [language === 'zh' ? 'timestamp-mod · 时间显示' : 'timestamp-mod · Timestamps'] }),
       Text({ color: UI_COLORS.gray, children: [language === 'zh' ? '显示用户消息发送时间及工具调用开始/结束时间。' : 'Show user message send time and tool call start/end times.'] }),
       Box({ children: [
@@ -526,6 +626,7 @@ async function renderConfigPane($: EngineInterface, e: any): Promise<any> {
             draftConfig = undefined
             await syncConfigState($)
             await resetI18nDraft($)
+            await resetTurnDurationDraft($)
             activeTab = 'statusline'
             await $.ui.close({ id: CONFIG_PANE })
           } }),
@@ -543,8 +644,10 @@ export const register: Register = on => {
 
   on('ui.render', { component: 'Pane', requestId: CONFIG_PANE }, ($, e) => renderConfigPane($, e))
 
-  // 外部语言修改只刷新来源，不覆盖尚未保存的草稿。
-  on('config.set', { key: 'i18n-mod.language' }, async ($, e, next) => {
+  // 外部配置修改只刷新宿主值，不覆盖尚未保存的草稿。
+  on('config.set', { key: [
+    'i18n-mod.language', 'i18n-mod.turnDurationMode', 'i18n-mod.turnDurationVisible', 'i18n-mod.turnDurationSpacing',
+  ] }, async ($, e, next) => {
     const saved = await next(e)
     if (saved.deny === undefined) $.ui.invalidate('ui.render')
     return saved
@@ -563,6 +666,7 @@ export const register: Register = on => {
     activeTab = 'statusline'
     await syncConfigState($)
     await resetI18nDraft($)
+    await resetTurnDurationDraft($)
     await $.ui.open({ id: CONFIG_PANE, title: 'CC Mods Config', focus: true, closeOnEscape: true })
     return { text: 'CC Mods configuration panel opened.' }
   })
