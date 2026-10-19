@@ -56,6 +56,7 @@ export const DEFAULT_CONFIG: StatusConfig = {
   timestamp: {
     enabled: true,
     format: 'HH:mm:ss',
+    tps: true,
   },
 }
 
@@ -153,6 +154,7 @@ export function normalizeConfig(value: unknown): StatusConfig {
     const timestamp = data.timestamp as Record<string, unknown>
     if (typeof timestamp.enabled === 'boolean') result.timestamp.enabled = timestamp.enabled
     if (typeof timestamp.format === 'string' && timestamp.format.length > 0) result.timestamp.format = timestamp.format
+    if (typeof timestamp.tps === 'boolean') result.timestamp.tps = timestamp.tps
   }
 
   return result
@@ -564,13 +566,21 @@ async function renderConfigPane($: EngineInterface, e: any): Promise<any> {
       Button({ key: 'turn-duration-cancel', label: language === 'zh' ? '取消耗时行修改' : 'Discard duration changes', onPress: () => resetTurnDurationDraft($) }),
       ...(durationDraft.error ? [Text({ key: 'turn-duration-error', color: UI_COLORS.red, children: [durationDraft.error] })] : []),
       Text({ key: 'timestamp-config-heading', color: UI_COLORS.cyan, weight: 'bold', children: [language === 'zh' ? 'timestamp-mod · 时间显示' : 'timestamp-mod · Timestamps'] }),
-      Text({ color: UI_COLORS.gray, children: [language === 'zh' ? '显示用户消息发送时间及工具调用开始/结束时间。' : 'Show user message send time and tool call start/end times.'] }),
+      Text({ color: UI_COLORS.gray, children: [language === 'zh' ? '显示用户消息发送时间、工具调用开始/结束时间与消耗的 Token。' : 'Show user message send time, tool call start/end times and their token usage.'] }),
       Box({ children: [
         Text({ color: UI_COLORS.gray, children: [language === 'zh' ? '插件状态：' : 'Plugin: '] }),
         Button({
           key: 'timestamp-enabled-toggle',
           label: current.timestamp.enabled ? enabled : disabled,
           onPress: () => changeConfig($, latest => ({ ...latest, timestamp: { ...latest.timestamp, enabled: !latest.timestamp.enabled } })),
+        }),
+      ] }),
+      Box({ children: [
+        Text({ color: UI_COLORS.gray, children: [language === 'zh' ? 'TPS / Token：' : 'TPS / tokens: '] }),
+        Button({
+          key: 'timestamp-tps-toggle',
+          label: current.timestamp.tps ? enabled : disabled,
+          onPress: () => changeConfig($, latest => ({ ...latest, timestamp: { ...latest.timestamp, tps: !latest.timestamp.tps } })),
         }),
       ] }),
       Input({

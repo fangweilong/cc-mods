@@ -51,6 +51,7 @@ export type TurnDurationConfigDraft = {
 export type TimestampConfig = {
   enabled: boolean
   format: string
+  tps: boolean
 }
 
 declare module 'claude-code' {
