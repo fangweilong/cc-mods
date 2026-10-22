@@ -29,6 +29,9 @@
 - `quota`：`⏳` `5h`、`1d`、`7d`、`1m` 配额与重置倒计时
 - `cost`：`💰` 会话成本，例如 `$0.37`
 - `cwd`：绿色 `📂` 工作目录，`$HOME` 折叠为 `~`，深路径显示最后三段
+- `turn_step`：紫色当前回合步骤序号及模型，例如 `step 2 · Opus 5`；默认关闭，避免状态栏过长
+- `turn_reason`：回合结束原因，例如 `answer`、`aborted`、`error`；默认关闭
+- `tool_count`：本回合主会话工具调用次数，例如 `3 tools`；默认关闭且为 0 时隐藏
 - Subagent：单独追加 `↳` 行，包含模型、角色、状态、Context、Token 和任务描述
 
 示例：
@@ -70,7 +73,10 @@ Mod 读取与 Python 版本相同的配置文件：
     "cache",
     "quota",
     "cost",
-    "cwd"
+    "cwd",
+    "turn_step",
+    "turn_reason",
+    "tool_count"
   ],
   "modules": {
     "model": true,
@@ -83,7 +89,10 @@ Mod 读取与 Python 版本相同的配置文件：
     "cache": true,
     "quota": true,
     "cost": true,
-    "cwd": true
+    "cwd": true,
+    "turn_step": false,
+    "turn_reason": false,
+    "tool_count": false
   },
   "promptFrame": {
     "title": "用户输入",
@@ -104,7 +113,7 @@ Mod 读取与 Python 版本相同的配置文件：
 - `displayMode`: `full`（完整模式，带前缀图标）/ `compact`（简洁模式，默认，无前缀图标）；缺少或无效时使用简洁模式
 - `language`: `en` / `zh`
 - `order`: 模块排序，缺失模块自动按默认顺序补齐
-- `modules`: 各模块启用/停用
+- `modules`: 各模块启用/停用；新增 `turn_step`、`turn_reason`、`tool_count` 默认关闭
 - `promptFrame`: 用户输入框标题、边框颜色、横竖线及四角符号
 
 统一配置由独立的 [`cc-mods-config`](../cc-mods-config/README.md) 插件管理。加载该插件后执行 `/my-cc-mods-config`，可修改状态栏位置、显示模式、语言、模块开关与顺序。选择位置或显示模式后点击“保存配置”，状态栏自动切换；关闭面板不保存未提交的修改。

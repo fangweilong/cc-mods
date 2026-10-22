@@ -16,6 +16,9 @@ const DEFAULT_ORDER = [
   'quota',
   'cost',
   'cwd',
+  'turn_step',
+  'turn_reason',
+  'tool_count',
 ] as const
 
 export type ModuleId = StatuslineModule
@@ -42,6 +45,9 @@ export const DEFAULT_CONFIG: StatusConfig = {
     quota: true,
     cost: true,
     cwd: true,
+    turn_step: false,
+    turn_reason: false,
+    tool_count: false,
   },
   promptFrame: {
     title: '用户输入',
@@ -131,7 +137,11 @@ export function normalizeConfig(value: unknown): StatusConfig {
       }
       requested.splice(insertAt, 0, item)
     }
-    result.order = requested
+    const legacyOrder = DEFAULT_ORDER.slice(0, 11)
+    result.order = [
+      ...requested.filter(item => legacyOrder.includes(item as typeof legacyOrder[number])),
+      ...requested.filter(item => !legacyOrder.includes(item as typeof legacyOrder[number])),
+    ]
   }
 
   if (data.modules && typeof data.modules === 'object') {
@@ -325,6 +335,9 @@ function configModuleLabel(module: ModuleId, language: Language): string {
     quota: { en: 'Quota', zh: '配额' },
     cost: { en: 'Cost', zh: '花费' },
     cwd: { en: 'Workspace', zh: '目录' },
+    turn_step: { en: 'Turn step', zh: '回合步骤' },
+    turn_reason: { en: 'Turn reason', zh: '回合原因' },
+    tool_count: { en: 'Tool count', zh: '工具次数' },
   }
   return labels[module][language]
 }

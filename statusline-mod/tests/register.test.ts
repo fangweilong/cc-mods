@@ -299,6 +299,29 @@ test('formats subagent lines with status, context, tokens, and task text', () =>
   )
 })
 
+test('supports opt-in fine-grained turn modules without changing legacy defaults', () => {
+  expect(DEFAULT_CONFIG.modules.turn_step).toBe(false)
+  expect(DEFAULT_CONFIG.modules.turn_reason).toBe(false)
+  expect(DEFAULT_CONFIG.modules.tool_count).toBe(false)
+
+  const snapshot = {
+    ...compactSnapshot,
+    turnStepIndex: 1,
+    turnStepModel: 'Opus 5',
+    turnStepMessageCount: 12,
+    turnReason: 'answer',
+    toolCount: 3,
+  }
+  const config = normalizeConfig({
+    displayMode: 'full',
+    order: ['turn_step', 'turn_reason', 'tool_count'],
+    modules: { model: false, state: false, env: false, git: false, git_stat: false, context: false, tokens: false, cache: false, quota: false, cost: false, cwd: false, turn_step: true, turn_reason: true, tool_count: true },
+  })
+
+  expect(stripAnsi(formatStatusLine(snapshot, config))).toBe('↻ step 2 · Opus 5 | ⏹ answer | 🛠 3 tools')
+  expect(stripAnsi(formatStatusLine(snapshot, normalizeConfig({ modules: { turn_step: true } })))).toContain('step 2')
+})
+
 const configWriter = {
   name: 'test-config-writer',
   register(on: On) {

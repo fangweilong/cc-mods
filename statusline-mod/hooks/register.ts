@@ -48,6 +48,9 @@ const DEFAULT_ORDER = [
   'quota',
   'cost',
   'cwd',
+  'turn_step',
+  'turn_reason',
+  'tool_count',
 ] as const
 
 export type ModuleId = StatuslineModule
@@ -87,6 +90,11 @@ export type StatusSnapshot = {
   gitInsertions: number
   gitDeletions: number
   activeTool?: string
+  turnStepIndex?: number
+  turnStepModel?: string
+  turnStepMessageCount?: number
+  turnReason?: string
+  toolCount?: number
   subagents: readonly SubagentSnapshot[]
 }
 
@@ -107,6 +115,9 @@ export const DEFAULT_CONFIG: StatusConfig = {
     quota: true,
     cost: true,
     cwd: true,
+    turn_step: false,
+    turn_reason: false,
+    tool_count: false,
   },
   promptFrame: {
     title: '用户输入',
@@ -121,8 +132,13 @@ export const DEFAULT_CONFIG: StatusConfig = {
 }
 
 const I18N = {
-  en: { idle: 'Idle', running: 'Running', thinking: 'Thinking', ctx: 'ctx', cache: 'cache' },
-  zh: { idle: '就绪', running: '运行中', thinking: '思考中', ctx: '上下文', cache: '缓存' },
+  en: { idle: 'Idle', running: 'Running', thinking: 'Thinking', ctx: 'ctx', cache: 'cache', step: 'step', tools: 'tools' },
+  zh: { idle: '就绪', running: '运行中', thinking: '思考中', ctx: '上下文', cache: '缓存', step: '步骤', tools: '工具' },
+} as const
+
+const TURN_REASONS = {
+  en: { answer: 'answer', aborted: 'aborted', refusal: 'refusal', error: 'error' },
+  zh: { answer: '回答', aborted: '中断', refusal: '拒绝', error: '错误' },
 } as const
 
 const STATUS_TEXT = {
@@ -195,6 +211,7 @@ let snapshot: StatusSnapshot = {
   gitDirty: false,
   gitInsertions: 0,
   gitDeletions: 0,
+  toolCount: 0,
   subagents: [],
 }
 
@@ -251,7 +268,13 @@ export function normalizeConfig(value: unknown): StatusConfig {
       }
       requested.splice(insertAt, 0, item)
     }
-    result.order = requested
+    // Keep newly introduced optional modules after the legacy sequence so old
+    // custom orders retain their established relative positions.
+    const legacyOrder = DEFAULT_ORDER.slice(0, 11)
+    result.order = [
+      ...requested.filter(item => legacyOrder.includes(item as typeof legacyOrder[number])),
+      ...requested.filter(item => !legacyOrder.includes(item as typeof legacyOrder[number])),
+    ]
   }
 
   if (data.modules && typeof data.modules === 'object') {
@@ -488,6 +511,13 @@ export function uiStatusRows(value: StatusSnapshot, currentConfig: StatusConfig)
     quota: uiQuotaSegments(value.rateLimits, showIcons),
     cost: value.costUsd !== undefined && Number.isFinite(value.costUsd) ? [{ text: `${icon('💰')}$${value.costUsd.toFixed(2)}`, color: UI_COLORS.green }] : undefined,
     cwd: value.cwd ? [{ text: `${icon('📂')}${shortPath(value.cwd, value.home)}`, color: UI_COLORS.green }] : undefined,
+    turn_step: value.turnStepIndex !== undefined
+      ? [{ text: `${icon('↻')}${I18N[language].step} ${value.turnStepIndex + 1}${value.turnStepModel ? ` · ${value.turnStepModel}` : ''}`, color: UI_COLORS.purple }]
+      : undefined,
+    turn_reason: value.turnReason ? [{ text: `${icon('⏹')}${TURN_REASONS[language][value.turnReason as keyof typeof TURN_REASONS.en] ?? value.turnReason}`, color: UI_COLORS.gray }] : undefined,
+    tool_count: value.toolCount !== undefined && value.toolCount > 0
+      ? [{ text: `${icon('🛠')}${value.toolCount} ${I18N[language].tools}`, color: UI_COLORS.yellow }]
+      : undefined,
   }
 
   const main: UiSegment[] = []
@@ -785,7 +815,7 @@ export const register: Register = on => {
   on('turn.start', async ($, e, next) => {
     if (!('agentId' in e && e.agentId)) {
       activeTurn = true
-      snapshot = { ...snapshot, state: 'Thinking' }
+      snapshot = { ...snapshot, state: 'Thinking', turnStepIndex: undefined, turnStepModel: undefined, turnStepMessageCount: undefined, turnReason: undefined, toolCount: 0 }
       show($)
     }
     return next(e)
@@ -796,7 +826,14 @@ export const register: Register = on => {
       updateAgentDetail(e.agentId, { model: e.model, contextPercent: undefined })
       await refreshAgents($)
     } else {
-      snapshot = { ...snapshot, model: e.model, state: 'Thinking' }
+      snapshot = {
+        ...snapshot,
+        model: e.model,
+        state: 'Thinking',
+        turnStepIndex: e.index,
+        turnStepModel: e.model,
+        turnStepMessageCount: e.messageCount,
+      }
       show($)
     }
 
@@ -823,7 +860,7 @@ export const register: Register = on => {
     } else {
       if (!hadStepUsage) applyTurnUsage(e.usage)
       activeTurn = false
-      snapshot = { ...snapshot, state: 'Idle' }
+      snapshot = { ...snapshot, state: 'Idle', turnReason: e.reason, turnStepIndex: undefined, turnStepModel: undefined, turnStepMessageCount: undefined }
       await refreshLiveData($)
     }
     show($)
@@ -840,7 +877,7 @@ export const register: Register = on => {
   on('tool.call', async ($, e, next) => {
     if (e.agentId) return next(e)
 
-    snapshot = { ...snapshot, activeTool: e.tool, state: 'Running' }
+    snapshot = { ...snapshot, activeTool: e.tool, state: 'Running', toolCount: (snapshot.toolCount ?? 0) + 1 }
     show($)
     try {
       return await next(e)

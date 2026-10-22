@@ -10,6 +10,9 @@ export type StatuslineModule =
   | 'quota'
   | 'cost'
   | 'cwd'
+  | 'turn_step'
+  | 'turn_reason'
+  | 'tool_count'
 
 export type PromptFrameConfig = {
   title: string
