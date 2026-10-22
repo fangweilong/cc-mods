@@ -39,9 +39,7 @@
 
 ## todo-panel
 
-- [ ] `tool.call` 的 `TodoWrite` hook 未按 `e.agentId` 过滤（`hooks/register.ts:136`），subagent 的 TodoWrite 会覆盖主会话清单。
-      修法：`if (e.agentId) return result`，先确认 matcher 能否直接写 `{ tool: 'TodoWrite', agentId: undefined }`。
-- [ ] 收敛 `any`：`renderPane($: EngineInterface, e: any)` 等，建议从 `claude-code` 取渲染事件类型。
+- [ ] 收敛 `any`：`renderPanel($, e: any, ...)` 等，建议从 `claude-code` 取渲染事件类型。
 
 ## project-files
 

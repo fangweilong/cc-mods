@@ -38,7 +38,7 @@ Claude Code Mod 集合，提供状态栏、Subagent 实时面板、用户输入�
 | `i18n-mod/` | `i18n-mod` | 汉化已开放的运行状态、快捷键、模式、部分提示、`/config` 标签/说明、斜杠命令描述与精确工具描述；耗时默认原生，可手动启用中性自定义耗时行。按需读取 JSON 语言包，支持简体中文与 English 原文模式；通过统一 `/my-cc-mods-config` 面板选择语言及耗时设置，新增语言无需注册。 |
 | `timestamp-mod/` | `timestamp-mod` | 显示用户消息时间、工具调用耗时与该请求的 Token 用量，以及每段回答的实时/精确 TPS；通过统一配置面板控制启用状态、TPS 开关与时间格式。 |
 | `user-prompt-frame/` | `user-prompt-frame` | 为用户消息添加“用户输入”边框，按终端宽度自适应，并按终端显示宽度处理中文、英文和 Emoji 混排；任务通知、其他会话消息和 Agent 消息仍使用 Claude Code 默认渲染。 |
-| `todo-panel/` | `todo-panel` | 监听成功的 `TodoWrite` 工具调用，自动打开独立 Todo 进度 Pane；与 Subagent 面板分离。 |
+| `todo-panel/` | `todo-panel` | 监听 Task 工具（`TaskCreate`/`TaskUpdate`/`TaskList`/`TaskGet`，兼容 `TodoWrite`）成功结果，自动打开独立任务进度 Pane；与 Subagent 面板分离。 |
 | `notification-mod/` | `notification-mod` | 主会话完成或失败时使用 `$.ui.notify` 发送成功/失败通知；主动中断和 Subagent 不通知。 |
 | `project-files/` | `project-files` | 通过 `/project-files` 打开独立文件浏览 Pane，使用 `$.fs` 浏览当前项目目录和预览文件。 |
 
@@ -50,7 +50,7 @@ Claude Code Mod 集合，提供状态栏、Subagent 实时面板、用户输入�
 - `subagent-split-view` 只观察和渲染 Subagent 事件，不创建 Agent、不修改 Agent 参数、不改变权限或工具执行结果；日志只保存在当前 Claude Code 进程内，每个 Agent 最多保留 120 条。
 - `i18n-mod` 只改变已开放的界面提示，不翻译会话内容、不调用模型；主动保存时通过宿主 `userConfig` 保存自己的语言和耗时行选项。耗时默认原生，自定义是独立契约，不等价于原生全部行为。权限弹窗不在覆盖范围内；与 `statusline-mod` 同用时，原生快捷键提示仍被后者隐藏。
 - `user-prompt-frame` 只改变符合用户输入条件的 `UserMessage` 渲染，不改变消息内容或会话行为。
-- `todo-panel` 只观察成功的 `TodoWrite` 工具结果并渲染独立任务面板，不修改任务数据，不处理 Subagent transcript。
+- `todo-panel` 只观察成功的 Task / TodoWrite 工具结果并渲染独立任务面板，不修改任务数据，不处理 Subagent transcript。
 - `notification-mod` 只观察主会话 `turn.complete` 并调用 `$.ui.notify`；不判断 OS 窗口焦点，不通知 Subagent，不回退 toast。
 - `project-files` 只在当前 session cwd 范围内通过 `$.fs` 浏览和预览文件，不调用外部进程或创建 OS 窗口。
 
@@ -246,7 +246,7 @@ macOS/Linux 示例：
 
 ### `todo-panel`
 
-成功捕获 `TodoWrite` 工具结果后自动打开独立任务面板，也可以手动打开：
+成功捕获 Task 工具（`TaskCreate`/`TaskUpdate`/`TaskList`/`TaskGet`，兼容 `TodoWrite`）结果后自动打开独立任务面板，也可以手动打开：
 
 ```text
 /todo-panel
