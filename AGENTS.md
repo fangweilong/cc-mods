@@ -1,6 +1,6 @@
 # AGENTS.md
 
-面向在本仓库工作的 Agent。项目说明、目录、验证命令、开发约定与待办统一放在这里；`TODO.md` 仅作为指向本文件的占位。
+面向在本仓库工作的 Agent。项目说明、目录、验证命令、开发约定与待办统一放在这里。
 
 仓库地址：<https://github.com/fangweilong/cc-mods>
 
@@ -18,7 +18,6 @@ Claude Code Mod 集合，提供状态栏、Subagent 实时面板、统一配置�
 ```text
 cc-mods/
 ├── AGENTS.md                  # 本文件：约定、命令、待办
-├── TODO.md                    # 占位，内容已合并到本文件
 ├── readme.md                  # 用户向文档
 ├── cc-mods-config/            # 统一可视化配置面板
 ├── statusline-mod/            # 原生 Mod UI 状态栏

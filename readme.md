@@ -402,7 +402,6 @@ claude plugin test .\tool-output
 cc-mods/
 ├── .gitignore
 ├── AGENTS.md
-├── TODO.md
 ├── LICENSE
 ├── readme.md
 ├── cc-mods-config/
