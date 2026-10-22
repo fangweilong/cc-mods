@@ -43,20 +43,16 @@
 
 ## project-files
 
-- [ ] `state.root` 直接取 `$.session.cwd()`（`hooks/register.ts:201`），未 canonicalize；而 `resolvedPath` 用 `stat.realPath` 比对（`hooks/register.ts:75`）。
-      symlink / junction / 8.3 短路径下可能整目录被误判为越界。修法：启动时用 `$.fs.stat(cwd, { resolve: true }).realPath` 作为 root。
-- [ ] `decodeText` 以含 `U+FFFD` 判定二进制（`hooks/register.ts:56-70`），合法包含替换字符的文本会被当作二进制。
-      修法：改用 `TextDecoder('utf-8', { fatal: true })`，由解码异常判定非法序列。
-- [ ] 异步导航竞态：`load` / `previewFile` 在 `await` 后用闭包中的旧 `state` 覆盖（`hooks/register.ts:98-130`），快速切换目录时可能回退到旧路径。
-      修法：每次导航递增序号，回写前比对。
+- [ ] 预览已支持 Markdown / Code / diff / PNG（terminal），并修复 root canonicalize、fatal UTF-8 解码与异步导航竞态。
+      仍需真实终端验收 `Image` 在 iTerm2 3.5+ 的缩放与窄面板表现。
 
 ## 新 Mod 候选
 
 | 候选 | 价值 | 依赖 API | 风险 |
 | --- | --- | --- | --- |
-| `prompt-library`：`#` 触发的提示词片段补全，片段存 `~/.claude/prompts` | 高，日常高频 | `prompt.autocomplete`（`token: /^#/`）、`$.fs` | 低 |
-| `session-recap`：会话摘要 Pane，按回合生成要点 | 中高，长会话找回上下文 | `$.session.turns/messages`、`$.model.complete`、`$.ui.open` | 中：模型调用有成本 |
-| `guard`：Bash 危险命令前置拦截/确认 | 高 | `tool.call` 返回 `{ deny }` 或 `next({ ...e, ... })` | 中：误拦会阻断正常工作 |
+| `prompt-library`：`#` 触发的提示词片段补全，片段存 `~/.claude/prompts` | 高，日常高频 | `prompt.autocomplete`（`token: /^#/`）、`prompt.edit`、`PromptDecoration.virtualText`、`$.fs` | 低 |
+| `session-recap`：会话摘要 Pane，按回合生成要点 | 中高，长会话找回上下文 | `$.session.turns/messages`、`$.model.fork`（复用主会话缓存前缀，比 complete 便宜）、`$.ui.open` | 中：模型调用有成本 |
+| `guard`：Bash 危险命令前置拦截/确认 | 高 | `tool.check` 返回 `{ decision: 'ask', reason }`（2.1.304 起为真人审批）、`prompt.mention`、`.catch` fail-closed | 中：需真实终端验收审批交互 |
 | `agent-pack`：内置常用 subagent 类型 | 中 | `agent.register` / `agent.offer` | 低 |
 | `tool-usage`：工具耗时/失败率统计 Pane | 中 | `tool.call`、`$.ui.open` | 低，但与 timestamp-mod 有重叠 |
 | `tts`：朗读回答 | 低 | `$.audio.speak` | 平台支持与打断体验未知 |

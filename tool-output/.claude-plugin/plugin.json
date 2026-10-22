@@ -1,0 +1,9 @@
+{
+  "name": "tool-output",
+  "version": "0.1.0",
+  "author": {
+    "name": "teler"
+  },
+  "description": "Optionally fold or flatten long tool results while keeping native output available on demand.",
+  "types": "./types/index.d.ts"
+}

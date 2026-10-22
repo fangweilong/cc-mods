@@ -8,8 +8,9 @@ import type {
 
 const PANE_ID = 'subagent-split-view'
 const MAX_LOG_ENTRIES = 120
-const MAX_VISIBLE_AGENTS = 8
-const MAX_ENTRY_LENGTH = 180
+const MAX_VISIBLE_AGENTS = 12
+const MAX_FINISHED_AGENTS = 6
+const MAX_ENTRY_LENGTH = 220
 
 const FINISHED_STATUSES = new Set([
   'completed',
@@ -47,10 +48,13 @@ type AgentPanel = {
   model?: string
   activity: string
   entries: LogEntry[]
+  startedAt: number
+  finishedAt?: number
 }
 
 const panels = new Map<string, AgentPanel>()
 let paneOpenRequested = false
+let viewedAgentId: string | undefined
 
 function cleanText(value: string): string {
   return value
@@ -96,6 +100,7 @@ function ensurePanel(info: AgentInfo): AgentPanel {
     info,
     activity: 'starting',
     entries: [],
+    startedAt: Date.now(),
   }
   panels.set(info.id, panel)
   return panel
@@ -125,16 +130,27 @@ function setActivity(agentId: string, activity: string): void {
   if (panel) panel.activity = clipText(activity, 80)
 }
 
+function pruneFinished(): void {
+  const finished = [...panels.values()]
+    .filter(panel => panel.finishedAt !== undefined)
+    .sort((left, right) => (left.finishedAt ?? 0) - (right.finishedAt ?? 0))
+  while (finished.length > MAX_FINISHED_AGENTS) {
+    const panel = finished.shift()
+    if (panel) panels.delete(panel.info.id)
+  }
+}
+
 async function refreshAgents($: EngineInterface, pruneMissing = false): Promise<void> {
   try {
     const agents = await $.agent.list()
     const listedAgentIds = new Set<string>()
     for (const info of agents) {
       listedAgentIds.add(info.id)
+      const panel = ensurePanel(info)
       if (isFinishedAgentStatus(info.status)) {
-        panels.delete(info.id)
+        panel.finishedAt ??= Date.now()
       } else {
-        ensurePanel(info)
+        panel.finishedAt = undefined
       }
     }
 
@@ -143,15 +159,10 @@ async function refreshAgents($: EngineInterface, pruneMissing = false): Promise<
         if (!listedAgentIds.has(agentId)) panels.delete(agentId)
       }
     }
+    pruneFinished()
   } catch {
     // The panel keeps the last known state if the task list is unavailable.
   }
-}
-
-async function closePaneIfEmpty($: EngineInterface): Promise<void> {
-  if (!paneOpenRequested || panels.size > 0) return
-  await $.ui.close({ id: PANE_ID })
-  paneOpenRequested = false
 }
 
 function invalidate($: EngineInterface): void {
@@ -161,9 +172,12 @@ function invalidate($: EngineInterface): void {
 function toolInputText(event: { tool: string; [key: string]: unknown }): string {
   const input = Object.entries(event)
     .filter(([key]) => !['tool', 'tool_use_id', 'agentId'].includes(key))
-    .map(([key, value]) => `${key}=${typeof value === 'string' ? value : JSON.stringify(value)}`)
+    .map(([key, value]) => {
+      const text = typeof value === 'string' ? value : JSON.stringify(value)
+      return `${key}=${clipText(text ?? '', 60)}`
+    })
     .join(' ')
-  return input ? `${event.tool} ${input}` : event.tool
+  return clipText(input ? `${event.tool} ${input}` : event.tool, 180)
 }
 
 function toolResultText(result: ToolCallResult): string {
@@ -172,11 +186,15 @@ function toolResultText(result: ToolCallResult): string {
   return result.text ?? 'done'
 }
 
+function lastLogRows(panel: AgentPanel): LogEntry[] {
+  return panel.entries.slice(-3)
+}
+
 function orderedPanels(): AgentPanel[] {
   return [...panels.values()]
     .sort((left, right) => {
-      const leftRunning = ['running', 'working', 'in_progress'].includes(left.info.status.toLowerCase())
-      const rightRunning = ['running', 'working', 'in_progress'].includes(right.info.status.toLowerCase())
+      const leftRunning = left.finishedAt === undefined
+      const rightRunning = right.finishedAt === undefined
       if (leftRunning !== rightRunning) return leftRunning ? -1 : 1
       return left.info.id.localeCompare(right.info.id)
     })
@@ -198,20 +216,27 @@ export function formatLogEntry(entry: LogEntry): string {
   return `${prefix[entry.kind]} ${entry.text}`
 }
 
-function switchMainView($: EngineInterface, agentId?: string): void {
+async function switchMainView($: EngineInterface, agentId?: string): Promise<void> {
   try {
-    Promise.resolve($.ui.view(agentId ? { agentId } : {})).catch(() => {
-      $.ui.toast(agentId ? 'Unable to open the subagent transcript.' : 'Unable to return to the main transcript.')
-    })
+    const result = await $.ui.view(agentId ? { agentId } : {})
+    if (result && typeof result === 'object' && 'deny' in result && result.deny) {
+      $.ui.toast(String(result.deny))
+      return
+    }
+    viewedAgentId = agentId
+    invalidate($)
   } catch {
-    $.ui.toast(agentId ? 'Subagent transcript view is unavailable.' : 'Main transcript view is unavailable.')
+    $.ui.toast(agentId ? 'Unable to open the native subagent transcript.' : 'Unable to return to the main transcript.')
   }
 }
 
 function renderPanel($: EngineInterface, e: any): any {
   const { Box, Text, Button } = $.ui.resolve(e)
   const currentPanels = orderedPanels()
-  const runningCount = currentPanels.filter(panel => ['running', 'working', 'in_progress'].includes(panel.info.status.toLowerCase())).length
+  const runningCount = currentPanels.filter(panel => panel.finishedAt === undefined).length
+  const viewing = viewedAgentId
+    ? currentPanels.find(panel => panel.info.id === viewedAgentId)
+    : undefined
   const children: any[] = [
     Box({
       flexDirection: 'row',
@@ -220,13 +245,28 @@ function renderPanel($: EngineInterface, e: any): any {
         Text({ color: COLORS.cyan, weight: 'bold', children: [formatPanelHeader(panels.size, runningCount)] }),
         Button({
           key: 'view-main-transcript',
-          label: '↩ main',
+          label: '↩ 主会话',
           plain: true,
-          onPress: () => switchMainView($),
+          onPress: () => void switchMainView($),
+        }),
+        Button({
+          key: 'clear-subagents',
+          label: '清除',
+          plain: true,
+          onPress: () => {
+            panels.clear()
+            viewedAgentId = undefined
+            invalidate($)
+          },
         }),
       ],
     }),
-    Text({ color: COLORS.gray, children: ['Click a subagent name to view its transcript.'] }),
+    Text({
+      color: COLORS.gray,
+      children: [viewing
+        ? `正在查看：${viewing.info.name ?? viewing.info.type} 的原生转录。`
+        : '点击「查看转录」打开原生 Subagent 转录（等同鼠标点击 Subagent）。'],
+    }),
   ]
 
   if (currentPanels.length === 0) {
@@ -236,9 +276,10 @@ function renderPanel($: EngineInterface, e: any): any {
   for (const panel of currentPanels) {
     const status = panel.info.status || 'unknown'
     const name = panel.info.name ?? panel.info.type ?? 'agent'
-    const title = `${statusIcon(status)} ${name} · ${panel.model ?? 'model pending'} · ${status}`
-    const task = clipText(panel.info.description, 100)
-    const logRows = panel.entries.slice(-12).map(entry => Text({
+    const isViewed = viewedAgentId === panel.info.id
+    const title = `${statusIcon(status)} ${name} · ${panel.info.type ?? 'agent'} · ${panel.model ?? 'model pending'} · ${status}`
+    const task = clipText(panel.info.description, 120)
+    const logRows = lastLogRows(panel).map(entry => Text({
       color: entry.kind === 'tool' ? COLORS.purple : entry.kind === 'result' ? COLORS.green : entry.kind === 'thinking' ? COLORS.gray : COLORS.blue,
       wrap: 'truncate-end',
       children: [formatLogEntry(entry)],
@@ -251,15 +292,21 @@ function renderPanel($: EngineInterface, e: any): any {
       borderColor: statusColor(status),
       paddingX: 1,
       children: [
-        Button({
-          key: `view-agent-${panel.info.id}`,
-          plain: true,
-          onPress: () => switchMainView($, panel.info.id),
-          children: [Text({ color: statusColor(status), weight: 'bold', children: [title] })],
-        }),
+        Box({ flexDirection: 'row', gap: 1, children: [
+          Text({ color: statusColor(status), weight: 'bold', wrap: 'truncate-end', children: [title] }),
+          Button({
+            key: `view-agent-${panel.info.id}`,
+            label: isViewed ? '返回主会话' : '查看转录',
+            variant: isViewed ? 'secondary' : 'primary',
+            onPress: () => void switchMainView($, isViewed ? undefined : panel.info.id),
+          }),
+        ] }),
         Text({ color: COLORS.gray, wrap: 'truncate-end', children: [`task: ${task || '(no description)'}`] }),
-        Text({ color: COLORS.yellow, wrap: 'truncate-end', children: [`activity: ${panel.activity}`] }),
+        Text({ color: COLORS.yellow, wrap: 'truncate-end', children: [`当前：${panel.activity}`] }),
         ...logRows,
+        ...(panel.finishedAt === undefined
+          ? []
+          : [Text({ color: COLORS.gray, children: ['已结束，可点击「查看转录」查看完整过程。'] })]),
       ],
     }))
   }
@@ -285,9 +332,12 @@ export const register: Register = on => {
   on('ui.render', { component: 'Pane', requestId: PANE_ID }, ($, e) => renderPanel($, e))
 
   on('session.start', async ($, e, next) => {
+    panels.clear()
+    viewedAgentId = undefined
+    paneOpenRequested = false
     await $.command.register({
       name: 'subagent-view',
-      description: 'Open the live Subagent execution pane. Use "clear" to remove its log.',
+      description: 'Open the live Subagent pane. Click "查看转录" to open the native transcript. Use "clear" to forget tracked agents.',
       argumentHint: '[clear]',
     })
     await refreshAgents($)
@@ -297,8 +347,9 @@ export const register: Register = on => {
   on('command.run', { command: 'subagent-view' }, async ($, e) => {
     if (e.args.trim().toLowerCase() === 'clear') {
       panels.clear()
+      viewedAgentId = undefined
       $.ui.invalidate('ui.render')
-      return { text: 'Subagent execution log cleared.' }
+      return { text: 'Subagent log cleared.' }
     }
 
     paneOpenRequested = false
@@ -386,9 +437,16 @@ export const register: Register = on => {
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
     if (e.agentId) {
-      await refreshAgents($, true)
-      panels.delete(e.agentId)
-      await closePaneIfEmpty($)
+      await refreshAgents($, false)
+      const panel = panels.get(e.agentId)
+      if (panel) {
+        panel.info = {
+          ...panel.info,
+          status: e.reason === 'error' ? 'failed' : 'completed',
+        }
+        panel.finishedAt ??= Date.now()
+        setActivity(e.agentId, e.reason === 'error' ? 'failed' : 'completed')
+      }
       invalidate($)
     }
     return result

@@ -25,11 +25,12 @@ claude --plugin-dir "./cc-mods-config" --plugin-dir "./user-prompt-frame"
 - **Statusline / 状态栏**：使用 `Select` 选择面板语言、状态栏位置和显示模式；使用按钮启用/停用模块、调整模块顺序。细粒度模块包括回合步骤 `turn_step`、回合结束原因 `turn_reason`、本回合工具次数 `tool_count`，默认关闭以避免状态栏过长
 - **Prompt frame / 输入框**：使用 `Input` 编辑用户输入框标题、颜色和边框符号
 - **Language & time / 语言与时间**：使用 `Input` / `Select` 配置 i18n 语言代码或 JSON 路径、时间格式，以及重新加载或取消语言修改；使用独立按钮切换时间显示、TPS / Token 与“自动展开工具组”（默认关闭，保留原生工具组折叠）
+- **Tool output / 工具输出**：选择 `off` / `fold` / `flat`、折叠阈值，以及错误结果是否保持展开
 - **Subagents**：显示 Subagent 面板的使用提示；当前没有可调配置
 
 所有 Tab 都保留统一的保存和关闭操作；切换 Tab 不会提交草稿。
 
-配置按 `statusline-mod`、`timestamp-mod`、`user-prompt-frame`、`i18n-mod` 和 `subagent-split-view` 分布在对应 Tab 中，避免单页表单过长。选项使用原生 `Select` 和 `Input` 控件，Tab 使用可点击按钮切换；当前 Tab 之外的控件不会抢占焦点或参与编辑。Subagent Tab 仅提示当前没有可调配置。
+配置按 `statusline-mod`、`timestamp-mod`、`user-prompt-frame`、`i18n-mod`、`tool-output` 和 `subagent-split-view` 分布在对应 Tab 中，避免单页表单过长。选项使用原生 `Select` 和 `Input` 控件，Tab 使用可点击按钮切换；当前 Tab 之外的控件不会抢占焦点或参与编辑。Subagent Tab 仅提示当前没有可调配置。
 
 修改后点击 `Save configuration` / 保存配置统一提交；`Close` 不保存未提交的草稿。i18n 需同时加载 `i18n-mod`，没有加载时提示不可用，宿主策略锁定时仅显示只读来源。
 
@@ -41,7 +42,7 @@ Subagent 面板当前没有可调配置。后续新增可调项也应统一接�
 
 ## 存储与职责
 
-- 状态栏与输入框继续使用 `~/.config/my-cc-mods/config.json`，保留 `language`、`order`、`modules`、`promptFrame` 格式，新增 `position`（`session-mode` / `below-prompt`）与 `displayMode`（`full` / `compact`）；`modules` 兼容新增 `turn_step`、`turn_reason`、`tool_count`，三者默认关闭；时间显示使用 `timestamp.enabled`、`timestamp.format` 与 `timestamp.tps`，工具组自动展开使用独立 boolean `timestamp.autoExpandToolGroups`（默认 `false`）；旧配置缺少位置字段时沿用现有位置，缺少显示模式或值无效时使用简洁模式（`compact`），缺少时间配置时启用 `HH:mm:ss`，缺少自动展开字段或值不是 boolean 时保留原生工具组折叠，无需迁移。
+- 状态栏与输入框继续使用 `~/.config/my-cc-mods/config.json`，保留 `language`、`order`、`modules`、`promptFrame` 格式，新增 `position`（`session-mode` / `below-prompt`）与 `displayMode`（`full` / `compact`）；`modules` 兼容新增 `turn_step`、`turn_reason`、`tool_count`，三者默认关闭；时间显示使用 `timestamp.enabled`、`timestamp.format` 与 `timestamp.tps`，工具组自动展开使用独立 boolean `timestamp.autoExpandToolGroups`（默认 `false`）；工具输出使用 `toolOutput.mode`（`off` / `fold` / `flat`）、`toolOutput.foldAfterLines`（默认 `12`）与 `toolOutput.keepErrorsExpanded`（默认 `true`）。旧配置缺少位置字段时沿用现有位置，缺少显示模式或值无效时使用简洁模式（`compact`），缺少时间配置时启用 `HH:mm:ss`，缺少自动展开字段或值不是 boolean 时保留原生工具组折叠，缺少工具输出配置时使用 `fold` 与 12 行阈值，无需迁移。
 - i18n 继续通过宿主 `userConfig` 保存 `i18n-mod.language`，不直接写 `settings.json`，也不向上述 JSON 复制语言来源。
 - 面板的草稿与错误状态归属 `cc-mods-config`，不访问其他 Mod 的 `$.state`。
 - 不绘制状态栏、不隐藏原生快捷提示、不订阅模型或 Agent 的运行事件。

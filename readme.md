@@ -18,6 +18,7 @@ Claude Code Mod 集合，提供状态栏、Subagent 实时面板、用户输入�
 | --- | --- |
 | 状态栏与配置面板 | `en` / `zh` 显示语言、状态栏位置（现有位置 / 输入框下方）、显示模式（完整 / 简洁）、模块开关和顺序；新增回合步骤、回合原因、工具次数开关 |
 | 时间显示 | 插件启用开关、TPS/Token 显示开关、时间格式规则；显示用户消息发送时间、工具调用耗时与 Token、每段回答的 TPS |
+| 工具输出 | `off` / `fold` / `flat` 三种模式、折叠阈值、错误结果是否保持展开 |
 | 用户输入框 | 标题、颜色、横竖线和四角符号 |
 | 语言与时间 → i18n | 语言代码或 JSON 路径、简体中文/English 原生语言选择器、重新加载已保存的语言包；耗时行原生/自定义、显隐、顶部间距及取消草稿 |
 | Subagent 实时面板 | 当前自动工作，没有可调配置；打开/清理命令仍保留 |
@@ -34,25 +35,27 @@ Claude Code Mod 集合，提供状态栏、Subagent 实时面板、用户输入�
 | --- | --- | --- |
 | `cc-mods-config/` | `cc-mods-config` | 独立的全仓库统一可视化配置面板，管理状态栏、输入框与 i18n 配置；不依赖任何功能 Mod。 |
 | `statusline-mod/` | `statusline-mod` | 使用 Claude Code 原生 Mod UI 渲染两行状态区域，展示模型、会话状态、运行环境、Git 分支与增删统计、Context、Token、缓存命中、配额、成本、工作目录及可选的回合步骤/结束原因/工具次数；同时显示运行中的 Subagent 摘要，不包含配置面板。 |
-| `subagent-split-view/` | `subagent-split-view` | 在 Claude Code 右侧打开实时 Subagent 面板，展示 Subagent 的名称、类型、模型、任务、当前活动、thinking/text 流、工具调用及执行结果；Subagent 全部结束后自动关闭面板。 |
+| `subagent-split-view/` | `subagent-split-view` | 在 Claude Code 右侧打开实时 Subagent 面板，展示名称、类型、模型、任务和当前活动；每张卡片可一键打开原生 Subagent transcript，已结束的 Agent 保留一段时间供回看。 |
 | `i18n-mod/` | `i18n-mod` | 汉化已开放的运行状态、快捷键、模式、部分提示、`/config` 标签/说明、斜杠命令描述与精确工具描述；耗时默认原生，可手动启用中性自定义耗时行。按需读取 JSON 语言包，支持简体中文与 English 原文模式；通过统一 `/my-cc-mods-config` 面板选择语言及耗时设置，新增语言无需注册。 |
 | `timestamp-mod/` | `timestamp-mod` | 显示用户消息时间、工具调用耗时与该请求的 Token 用量，以及每段回答的实时/精确 TPS；通过统一配置面板控制启用状态、TPS 开关与时间格式。 |
 | `user-prompt-frame/` | `user-prompt-frame` | 为用户消息添加“用户输入”边框，按终端宽度自适应，并按终端显示宽度处理中文、英文和 Emoji 混排；任务通知、其他会话消息和 Agent 消息仍使用 Claude Code 默认渲染。 |
 | `todo-panel/` | `todo-panel` | 监听 Task 工具（`TaskCreate`/`TaskUpdate`/`TaskList`/`TaskGet`，兼容 `TodoWrite`）成功结果，自动打开独立任务进度 Pane；与 Subagent 面板分离。 |
 | `notification-mod/` | `notification-mod` | 主会话完成或失败时使用 `$.ui.notify` 发送成功/失败通知；主动中断和 Subagent 不通知。 |
-| `project-files/` | `project-files` | 通过 `/project-files` 打开独立文件浏览 Pane，使用 `$.fs` 浏览当前项目目录和预览文件。 |
+| `project-files/` | `project-files` | 通过 `/project-files` 打开独立文件浏览 Pane，使用 `$.fs` 浏览目录，并按类型预览文本、Markdown、代码、diff 与 PNG 图片。 |
+| `tool-output/` | `tool-output` | 可选地折叠长工具结果（`fold`）或平铺工具组（`flat`），保留原生 `ctrl+o` 展开；配置接入统一面板。 |
 
 ### 各 Mod 的边界
 
 - `cc-mods-config` 独立提供统一配置面板，保存兼容配置文件；主动保存 i18n 时通过宿主配置 API 更新其语言和耗时行选项，不直接改写 `settings.json`，不依赖其他 Mod 的状态。
 - `statusline-mod` 只观察和渲染会话状态、读取配置，不注册配置面板命令、不写配置，也不覆盖原生 `statusLine` / `subagentStatusLine` 配置。
 - `timestamp-mod` 只观察用户提交、工具调用和工具结果并渲染时间戳；读取统一配置，不改变 Prompt、工具参数、工具结果或会话记录。
-- `subagent-split-view` 只观察和渲染 Subagent 事件，不创建 Agent、不修改 Agent 参数、不改变权限或工具执行结果；日志只保存在当前 Claude Code 进程内，每个 Agent 最多保留 120 条。
+- `subagent-split-view` 只观察和渲染 Subagent 事件，不创建 Agent、不修改 Agent 参数、不改变权限或工具执行结果；日志只保存在当前 Claude Code 进程内，每个 Agent 最多保留 120 条，已结束的 Agent 最多保留 6 个。
 - `i18n-mod` 只改变已开放的界面提示，不翻译会话内容、不调用模型；主动保存时通过宿主 `userConfig` 保存自己的语言和耗时行选项。耗时默认原生，自定义是独立契约，不等价于原生全部行为。权限弹窗不在覆盖范围内；与 `statusline-mod` 同用时，原生快捷键提示仍被后者隐藏。
 - `user-prompt-frame` 只改变符合用户输入条件的 `UserMessage` 渲染，不改变消息内容或会话行为。
 - `todo-panel` 只观察成功的 Task / TodoWrite 工具结果并渲染独立任务面板，不修改任务数据，不处理 Subagent transcript。
 - `notification-mod` 只观察主会话 `turn.complete` 并调用 `$.ui.notify`；不判断 OS 窗口焦点，不通知 Subagent，不回退 toast。
-- `project-files` 只在当前 session cwd 范围内通过 `$.fs` 浏览和预览文件，不调用外部进程或创建 OS 窗口。
+- `project-files` 只在当前 session cwd 范围内通过 `$.fs` 浏览和预览文件；图片预览仅使用当前 surface 支持的格式，不调用外部进程或创建 OS 窗口。
+- `tool-output` 只挂 `ui.render` 的 `ToolResult` / `ToolGroup`，只改变显示，不修改工具结果、会话记录或模型输入；折叠状态仅保存在当前进程内。
 
 ## 环境要求
 
@@ -82,6 +85,7 @@ claude --plugin-dir ".\timestamp-mod"
 claude --plugin-dir ".\todo-panel"
 claude --plugin-dir ".\notification-mod"
 claude --plugin-dir ".\project-files"
+claude --plugin-dir ".\tool-output"
 ```
 
 也可以使用绝对路径：
@@ -96,6 +100,7 @@ claude --plugin-dir "D:\Codes\other\cc-mods\timestamp-mod"
 claude --plugin-dir "D:\Codes\other\cc-mods\todo-panel"
 claude --plugin-dir "D:\Codes\other\cc-mods\notification-mod"
 claude --plugin-dir "D:\Codes\other\cc-mods\project-files"
+claude --plugin-dir "D:\Codes\other\cc-mods\tool-output"
 ```
 
 需要面板和功能 Mod 同时可用时，在同一次启动中加载各目录，例如不加载状态栏、只配置输入框和 i18n：
@@ -168,7 +173,7 @@ macOS/Linux 示例：
 }
 ```
 
-配置完成后重启 Claude Code。该变量应指向集合仓库根目录，即包含 `cc-mods-config/`、`statusline-mod/`、`subagent-split-view/`、`user-prompt-frame/`、`i18n-mod/` 和 `timestamp-mod/` 的目录；如果只想临时加载某一个 Mod，请继续使用 `--plugin-dir` 方式。
+配置完成后重启 Claude Code。该变量应指向集合仓库根目录，即包含 `cc-mods-config/`、`statusline-mod/`、`subagent-split-view/`、`user-prompt-frame/`、`i18n-mod`、`timestamp-mod`、`tool-output/` 等子目录的目录；如果只想临时加载某一个 Mod，请继续使用 `--plugin-dir` 方式。
 
 ### 方式四：复制到本地 Mod 开发目录
 
@@ -192,6 +197,13 @@ macOS/Linux 示例：
 │   ├── hooks/hooks.json
 │   ├── hooks/register.ts
 │   ├── types/index.d.ts
+│   └── tests/register.test.ts
+├── tool-output/
+│   ├── .claude-plugin/plugin.json
+│   ├── hooks/hooks.json
+│   ├── hooks/register.ts
+│   ├── types/index.d.ts
+│   ├── README.md
 │   └── tests/register.test.ts
 └── user-prompt-frame/
     ├── .claude-plugin/plugin.json
@@ -268,7 +280,17 @@ macOS/Linux 示例：
 /project-files close
 ```
 
-面板只读取 session cwd 范围内的目录和文件，不创建外部终端窗口。
+面板只读取 session cwd 范围内的目录和文件，不创建外部终端窗口。Markdown、代码和 diff 使用原生渲染；PNG 在 terminal surface 直接预览，其他图片格式显示说明。预览页支持「复制路径」。
+
+### `tool-output`
+
+加载后默认折叠超过阈值的工具结果；在 `/my-cc-mods-config` 的“工具输出”页签切换模式：
+
+- `off`：完全原生；
+- `fold`：长结果折叠为一行摘要，点击展开/收起；
+- `flat`：工具组平铺为逐项工具行。
+
+`ctrl+o` / `--verbose` 的原生展开始终优先；错误结果默认保持展开。折叠只影响显示，不改变工具结果、会话记录或模型输入。
 
 ### `subagent-split-view`
 
@@ -278,13 +300,13 @@ Subagent 启动后会自动尝试打开右侧面板，也可以手动打开：
 /subagent-view
 ```
 
-清除当前进程中已记录的执行日志：
+清除当前进程中已记录的 Agent 卡片：
 
 ```text
 /subagent-view clear
 ```
 
-终端宽度不足时，面板会等待；扩大终端后重新执行 `/subagent-view` 即可。
+每张卡片有「查看转录」按钮，调用 `$.ui.view({ agentId })` 打开原生 Subagent transcript，与鼠标点击 Subagent 的效果一致；「返回主会话」或顶部 `↩ 主会话` 回到主会话。已结束的 Agent 不再立即消失，最多保留最近 6 个供回看。终端宽度不足时，面板会等待；扩大终端后重新执行 `/subagent-view` 即可。
 
 ### `i18n-mod`
 
@@ -370,6 +392,8 @@ claude plugin validate .\i18n-mod
 claude plugin test .\i18n-mod
 claude plugin validate .\timestamp-mod
 claude plugin test .\timestamp-mod
+claude plugin validate .\tool-output
+claude plugin test .\tool-output
 ```
 
 ## 目录结构
@@ -411,6 +435,13 @@ cc-mods/
 │   ├── hooks/hooks.json
 │   ├── hooks/register.ts
 │   ├── types/index.d.ts
+│   └── tests/register.test.ts
+├── tool-output/
+│   ├── .claude-plugin/plugin.json
+│   ├── hooks/hooks.json
+│   ├── hooks/register.ts
+│   ├── types/index.d.ts
+│   ├── README.md
 │   └── tests/register.test.ts
 └── user-prompt-frame/
     ├── .claude-plugin/plugin.json

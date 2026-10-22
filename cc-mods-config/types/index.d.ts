@@ -58,10 +58,18 @@ export type TimestampConfig = {
   autoExpandToolGroups: boolean
 }
 
+export type ToolOutputMode = 'off' | 'fold' | 'flat'
+
+export type ToolOutputConfig = {
+  mode: ToolOutputMode
+  foldAfterLines: number
+  keepErrorsExpanded: boolean
+}
+
 declare module 'claude-code' {
   interface PluginState {
     'cc-mods-config': {
-      config: StatuslineConfig & { timestamp: TimestampConfig }
+      config: StatuslineConfig & { timestamp: TimestampConfig; toolOutput: ToolOutputConfig }
       i18nDraft: I18nConfigDraft
       turnDurationDraft: TurnDurationConfigDraft
     }

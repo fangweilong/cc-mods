@@ -1,6 +1,6 @@
 import { atom, read, update } from 'claude-code'
 import type { ConfigRow, EngineInterface, Register } from 'claude-code'
-import type { I18nConfigDraft, StatuslineConfig, StatuslineDisplayMode, StatuslineModule, StatuslinePosition, TimestampConfig, TurnDurationConfigDraft } from '../types'
+import type { I18nConfigDraft, StatuslineConfig, StatuslineDisplayMode, StatuslineModule, StatuslinePosition, TimestampConfig, ToolOutputConfig, ToolOutputMode, TurnDurationConfigDraft } from '../types'
 
 const UI_COLORS = { cyan: '#50c8ff', red: '#ff5a64', gray: '#8791a0' } as const
 
@@ -26,6 +26,7 @@ export type Language = 'en' | 'zh'
 
 export type StatusConfig = StatuslineConfig & {
   timestamp: TimestampConfig
+  toolOutput: ToolOutputConfig
 }
 
 export const DEFAULT_CONFIG: StatusConfig = {
@@ -65,6 +66,11 @@ export const DEFAULT_CONFIG: StatusConfig = {
     tps: true,
     autoExpandToolGroups: false,
   },
+  toolOutput: {
+    mode: 'fold',
+    foldAfterLines: 12,
+    keepErrorsExpanded: true,
+  },
 }
 
 const configAtom = atom({ plugin: 'cc-mods-config', key: 'config' } as const, cloneConfig(DEFAULT_CONFIG))
@@ -74,9 +80,9 @@ const turnDurationDraftAtom = atom({ plugin: 'cc-mods-config', key: 'turnDuratio
 const TURN_DURATION_FIELDS = ['turnDurationMode', 'turnDurationVisible', 'turnDurationSpacing'] as const
 
 const CONFIG_PANE = 'my-cc-mods-config'
-type ConfigTab = 'statusline' | 'prompt-frame' | 'language-time' | 'subagents'
+type ConfigTab = 'statusline' | 'prompt-frame' | 'language-time' | 'tool-output' | 'subagents'
 
-const CONFIG_TABS: readonly ConfigTab[] = ['statusline', 'prompt-frame', 'language-time', 'subagents']
+const CONFIG_TABS: readonly ConfigTab[] = ['statusline', 'prompt-frame', 'language-time', 'tool-output', 'subagents']
 let activeTab: ConfigTab = 'statusline'
 let config: StatusConfig = cloneConfig(DEFAULT_CONFIG)
 let configPath = ''
@@ -91,6 +97,7 @@ function cloneConfig(value: StatusConfig): StatusConfig {
     modules: { ...value.modules },
     promptFrame: { ...value.promptFrame },
     timestamp: { ...value.timestamp },
+    toolOutput: { ...DEFAULT_CONFIG.toolOutput, ...value.toolOutput },
   }
 }
 
@@ -106,6 +113,7 @@ export function normalizeConfig(value: unknown): StatusConfig {
     modules?: unknown
     promptFrame?: unknown
     timestamp?: unknown
+    toolOutput?: unknown
   }
 
   if (data.position === 'session-mode' || data.position === 'below-prompt') {
@@ -167,6 +175,19 @@ export function normalizeConfig(value: unknown): StatusConfig {
     if (typeof timestamp.format === 'string' && timestamp.format.length > 0) result.timestamp.format = timestamp.format
     if (typeof timestamp.tps === 'boolean') result.timestamp.tps = timestamp.tps
     if (typeof timestamp.autoExpandToolGroups === 'boolean') result.timestamp.autoExpandToolGroups = timestamp.autoExpandToolGroups
+  }
+
+  if (data.toolOutput && typeof data.toolOutput === 'object') {
+    const toolOutput = data.toolOutput as Record<string, unknown>
+    if (toolOutput.mode === 'off' || toolOutput.mode === 'fold' || toolOutput.mode === 'flat') {
+      result.toolOutput.mode = toolOutput.mode
+    }
+    if (typeof toolOutput.foldAfterLines === 'number' && Number.isFinite(toolOutput.foldAfterLines)) {
+      result.toolOutput.foldAfterLines = Math.min(200, Math.max(1, Math.round(toolOutput.foldAfterLines)))
+    }
+    if (typeof toolOutput.keepErrorsExpanded === 'boolean') {
+      result.toolOutput.keepErrorsExpanded = toolOutput.keepErrorsExpanded
+    }
   }
 
   return result
@@ -347,6 +368,7 @@ function configTabLabel(tab: ConfigTab, language: Language): string {
     statusline: { en: 'Statusline', zh: '状态栏' },
     'prompt-frame': { en: 'Prompt frame', zh: '输入框' },
     'language-time': { en: 'Language & time', zh: '语言与时间' },
+    'tool-output': { en: 'Tool output', zh: '工具输出' },
     subagents: { en: 'Subagents', zh: 'Subagent' },
   }
   return labels[tab][language]
@@ -620,6 +642,62 @@ async function renderConfigPane($: EngineInterface, e: any): Promise<any> {
     ],
   })
 
+  const toolOutputSection = Box({
+    key: 'tool-output-config-section',
+    flexDirection: 'column',
+    flexShrink: 0,
+    marginTop: 1,
+    children: [
+      Text({ key: 'tool-output-config-heading', color: UI_COLORS.cyan, weight: 'bold', children: [language === 'zh' ? 'tool-output · 工具结果' : 'tool-output · Tool results'] }),
+      Text({ color: UI_COLORS.gray, children: [language === 'zh'
+        ? '可选地折叠长结果或平铺工具组；ctrl+o 的原生展开始终优先。'
+        : 'Optionally fold long results or flatten tool groups; native ctrl+o expansion always wins.'] }),
+      Select({
+        key: 'tool-output-mode',
+        label: language === 'zh' ? '显示模式' : 'Display mode',
+        value: current.toolOutput.mode,
+        options: [
+          { value: 'off', label: language === 'zh' ? '关闭（完全原生）' : 'Off (native)' },
+          { value: 'fold', label: language === 'zh' ? '长结果折叠' : 'Fold long results' },
+          { value: 'flat', label: language === 'zh' ? '工具组平铺' : 'Flatten tool groups' },
+        ],
+        onSelect: (value: ToolOutputMode) => changeConfig($, latest => ({
+          ...latest,
+          toolOutput: { ...latest.toolOutput, mode: value },
+        })),
+      }),
+      Select({
+        key: 'tool-output-fold-after',
+        label: language === 'zh' ? '折叠阈值（行）' : 'Fold after (lines)',
+        value: String(current.toolOutput.foldAfterLines),
+        options: [
+          ...[8, 12, 20, 40, 80].map(lines => ({ value: String(lines), label: String(lines) })),
+          ...([8, 12, 20, 40, 80].includes(current.toolOutput.foldAfterLines)
+            ? []
+            : [{ value: String(current.toolOutput.foldAfterLines), label: String(current.toolOutput.foldAfterLines) }]),
+        ],
+        onSelect: (value: string) => changeConfig($, latest => ({
+          ...latest,
+          toolOutput: { ...latest.toolOutput, foldAfterLines: Number(value) },
+        })),
+      }),
+      Box({ children: [
+        Text({ color: UI_COLORS.gray, children: [language === 'zh' ? '错误结果保持展开：' : 'Keep errored results expanded: '] }),
+        Button({
+          key: 'tool-output-keep-errors-toggle',
+          label: current.toolOutput.keepErrorsExpanded ? enabled : disabled,
+          onPress: () => changeConfig($, latest => ({
+            ...latest,
+            toolOutput: { ...latest.toolOutput, keepErrorsExpanded: !latest.toolOutput.keepErrorsExpanded },
+          })),
+        }),
+      ] }),
+      Text({ dimColor: true, children: [language === 'zh'
+        ? '折叠只替换显示，不改工具结果、会话记录或模型输入；点击行可展开和收起。'
+        : 'Folding only changes display; tool results, transcripts and model input are untouched. Click a row to expand or collapse.'] }),
+    ],
+  })
+
   const subagentSection = Box({
     key: 'subagent-config-section',
     flexDirection: 'column',
@@ -632,7 +710,7 @@ async function renderConfigPane($: EngineInterface, e: any): Promise<any> {
     ],
   })
 
-  const tabContent = { statusline: statuslineSection, 'prompt-frame': promptFrameSection, 'language-time': languageTimeSection, subagents: subagentSection }[activeTab]
+  const tabContent = { statusline: statuslineSection, 'prompt-frame': promptFrameSection, 'language-time': languageTimeSection, 'tool-output': toolOutputSection, subagents: subagentSection }[activeTab]
   const tabButtons = CONFIG_TABS.map(tab => Button({
     key: `config-tab-${tab}`,
     label: configTabLabel(tab, language),

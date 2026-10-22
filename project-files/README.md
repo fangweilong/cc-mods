@@ -4,10 +4,17 @@
 
 ## 功能
 
-- 根目录固定为 session cwd；目录进入和返回均通过 `$.fs.list`、`$.fs.stat` 校验。
+- 根目录固定为 session cwd 的规范化 `realPath`；目录进入和返回均通过 `$.fs.list`、`$.fs.stat` 校验。
 - 拒绝包含 `..` 的路径，并用 `realPath` 约束符号链接不能逃出 session cwd。
-- 文件预览以 bytes 读取并严格解码 UTF-8；二进制或不可解码内容显示提示，不把二进制当文本渲染。
-- 预览最多显示 12,000 个字符，超出部分显示截断标记；目录最多显示 200 项。
+- 按文件类型预览：
+  - Markdown（`.md` / `.mdx` / `.markdown`）使用原生 `Markdown` 渲染；
+  - 常见代码文件使用原生 `Code` 做语法高亮；
+  - `.diff` / `.patch` 使用 `Code` 的 diff 着色；
+  - PNG 图片在 terminal surface 使用原生 `Image` 预览；其他图片格式或 surface 显示说明；
+  - 其他 UTF-8 文本按原样显示。
+- 文件预览以 bytes 读取，并用 `TextDecoder('utf-8', { fatal: true })` 严格解码；二进制或不可解码内容显示提示。
+- 预览最多显示 60,000 个字符，超出部分显示截断标记；目录最多显示 200 项。
+- 支持「复制路径」；快速切换目录或文件时用递增序号丢弃过期异步结果。
 - 不调用 `process`，不修改现有 Pane，只打开 `project-files` 自己的 Pane。
 
 ## 使用
