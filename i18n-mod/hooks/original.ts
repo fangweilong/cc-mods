@@ -15,7 +15,10 @@ export const ORIGINAL_PACK: LanguagePack = {
     unsupported: 'Invalid language code or JSON path: {language}',
     loadFailed: 'Could not load the language pack; keeping the current language: {reason}',
     saveFailed: 'Could not save the UI language: {reason}',
-    usage: 'Usage: /i18n [list | reload | <language code or JSON path>]',
+    usage: 'Usage: /i18n [list | reload | samples [clear] | <language code or JSON path>]',
+    samplesHeader: 'Collected untranslated samples ({count}):',
+    samplesEmpty: 'No untranslated samples collected.',
+    samplesCleared: 'Collected samples cleared.',
   },
 }
 

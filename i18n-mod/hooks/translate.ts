@@ -1,4 +1,4 @@
-import type { HintKey, LanguagePack } from '../types'
+import type { CommandTranslation, ConfigTranslation, HintKey, LanguagePack } from '../types'
 
 // 只匹配完整快捷键提示片段，避免改动文件名、命令、内容中的同名词。
 const HINT_RULES: readonly { pattern: RegExp; key: HintKey }[] = [
@@ -76,6 +76,36 @@ export function translateNotice(text: string, entries?: Readonly<Record<string, 
     if (pattern.test(text)) return `${translated}${text.slice(prefix.length)}`
   }
   return text
+}
+
+/** 配置行只翻译宿主提供的 label/description，不修改 key、provider 或隐藏状态。 */
+export function translateConfig(
+  key: string,
+  label: string,
+  description: string | undefined,
+  entries?: Readonly<Record<string, ConfigTranslation>>,
+): { label: string; description?: string } {
+  const translation = entries && Object.prototype.hasOwnProperty.call(entries, key) ? entries[key] : undefined
+  if (!translation) return { label, ...(description === undefined ? {} : { description }) }
+  return {
+    label: translation.label ?? label,
+    ...(translation.description === undefined ? (description === undefined ? {} : { description }) : { description: translation.description }),
+  }
+}
+
+/** 斜杠命令只翻译展示字段，命令名、可见性和执行协议保持宿主原样。 */
+export function translateCommand(
+  command: string,
+  description: string,
+  argumentHint: string | undefined,
+  entries?: Readonly<Record<string, CommandTranslation>>,
+): { description: string; argumentHint?: string } {
+  const translation = entries && Object.prototype.hasOwnProperty.call(entries, command) ? entries[command] : undefined
+  if (!translation) return { description, ...(argumentHint === undefined ? {} : { argumentHint }) }
+  return {
+    description: translation.description ?? description,
+    ...(translation.argumentHint === undefined ? (argumentHint === undefined ? {} : { argumentHint }) : { argumentHint: translation.argumentHint }),
+  }
 }
 
 /** 使用回调替换占位符，保持动态值中的 $、反斜杠等字符不变。 */

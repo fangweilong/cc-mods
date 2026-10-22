@@ -2,7 +2,9 @@ import { expect, test } from 'claude-code/testing'
 import type { ConfigSetInput, ConfigSetResult, ConfigValue, EngineInterface, On, PluginOptions, RenderElement, RenderInput } from 'claude-code'
 import type { LanguageSelection, TurnDurationConfig } from '../types'
 import { register } from '../hooks/register'
+import { registerCommandDescribe } from '../hooks/commands'
 import { parseLanguagePack } from '../hooks/language'
+import { clearSamples } from '../hooks/samples'
 import { ORIGINAL_SELECTION } from '../hooks/original'
 import type { Engine, Plugin, TestRest } from 'claude-code/testing'
 import { mockWorld, JA_DATA, ZH_DATA, JA_DURATION_DATA, ZH_DURATION_DATA } from './fixtures'
@@ -205,6 +207,31 @@ test('localizes known notices without changing slash commands or visibility', as
   })
   await ui.redraw({ text: 'Update available for D:/work/project', command: null })
   expect(JSON.parse((await ui.find({ type: 'Text' }))!.text).text).toBe('有可用更新 for D:/work/project')
+  await ui.unmount()
+})
+
+test('localizes background task notifications and leaves user prompts untouched', async ($, on) => {
+  mockWorld(on)
+  renderProps(on)
+  await start($)
+  const ui = await $.ui.mount({
+    plugin: 'i18n-mod', surface: 'terminal', component: 'UserMessage',
+    props: {
+      text: 'Update available: task finished',
+      origin: { kind: 'task-notification' },
+      isExpanded: false,
+      task: { id: 'task-1', status: 'completed' },
+    },
+  })
+  expect(JSON.parse((await ui.find({ type: 'Text' }))!.text).text).toBe('有可用更新: task finished')
+
+  const prompt = 'Update available: this is my own prompt'
+  await ui.redraw({
+    text: prompt,
+    origin: { kind: 'composer' },
+    isExpanded: false,
+  })
+  expect(JSON.parse((await ui.find({ type: 'Text' }))!.text).text).toBe(prompt)
   await ui.unmount()
 })
 
@@ -1226,6 +1253,7 @@ test('fresh register activations rebuild retained component state from changed h
       },
     },
     command: { register: async () => ({ command: 'i18n' }) },
+    ui: { invalidate: () => {} },
   } as unknown as EngineInterface
   const activate = async (options: PluginOptions) => {
     let sessionStart: StartHook | undefined
@@ -1268,4 +1296,106 @@ test('a rejecting downstream config save cannot apply provisional component stat
   }
   expect(rejected).toBe(true)
   expect(writes).toBe(0)
+})
+
+test('translates slash command display fields and leaves execution protocol untouched', async () => {
+  type DescribeInput = {
+    command: string; description: string; argumentHint?: string
+    isHidden: boolean; immediate: boolean; provider: { plugin: string; tier: string }
+  }
+  type DescribeHook = ($: EngineInterface, e: DescribeInput, next: (e: DescribeInput) => Promise<DescribeInput>) => Promise<DescribeInput>
+  let hook: DescribeHook | undefined
+  const capture = ((event: string, matcherOrHandler: unknown, maybeHandler?: unknown) => {
+    const handler = maybeHandler ?? matcherOrHandler
+    if (event === 'command.describe') hook = handler as DescribeHook
+    return { catch() {} }
+  }) as unknown as On
+  registerCommandDescribe(capture)
+  expect(hook).toBeDefined()
+
+  const selection = { source: 'zh-CN', pack: parseLanguagePack(JSON.stringify(ZH_DATA)) }
+  const host = { state: { get: async () => ({ value: selection, version: 1 }) } } as unknown as EngineInterface
+  const input: DescribeInput = {
+    command: 'clear', description: 'Clear conversation', argumentHint: '[name]',
+    isHidden: false, immediate: false, provider: { plugin: 'engine', tier: 'core' },
+  }
+  const forwarded: DescribeInput[] = []
+  const result = await hook!(host, input, async e => { forwarded.push(e); return e })
+  expect(result).toEqual({ ...input, description: '清空会话', argumentHint: '[名称]' })
+  expect(forwarded[0]!.command).toBe('clear')
+  expect(forwarded[0]!.provider).toEqual({ plugin: 'engine', tier: 'core' })
+
+  const unknown: DescribeInput = { ...input, command: 'future-command', description: 'Future' }
+  expect(await hook!(host, unknown, async e => { forwarded.push(e); return e })).toBe(unknown)
+  expect(forwarded[1]).toBe(unknown)
+
+  const pluginCommand: DescribeInput = { ...input, provider: { plugin: 'other-mod', tier: 'community' } }
+  expect(await hook!(host, pluginCommand, async e => { forwarded.push(e); return e })).toBe(pluginCommand)
+  expect(forwarded[2]).toBe(pluginCommand)
+})
+
+test('translates config labels and descriptions without changing the row key', async () => {
+  type ConfigDescribeInput = {
+    key: string; label: string; description?: string
+    isHidden: boolean; provider: { plugin: string; tier: string }
+  }
+  type ConfigDescribeHook = ($: EngineInterface, e: ConfigDescribeInput, next: (e: ConfigDescribeInput) => Promise<ConfigDescribeInput>) => Promise<ConfigDescribeInput>
+  let hook: ConfigDescribeHook | undefined
+  const capture = ((event: string, matcherOrHandler: unknown, maybeHandler?: unknown) => {
+    const handler = maybeHandler ?? matcherOrHandler
+    if (event === 'config.describe') hook = handler as ConfigDescribeHook
+    return { catch() {} }
+  }) as unknown as On
+  register(capture, {})
+  expect(hook).toBeDefined()
+
+  const selection = { source: 'zh-CN', pack: parseLanguagePack(JSON.stringify(ZH_DATA)) }
+  const host = { state: { get: async () => ({ value: selection, version: 1 }) } } as unknown as EngineInterface
+  const input: ConfigDescribeInput = {
+    key: 'theme', label: 'Theme', description: 'Choose a theme',
+    isHidden: false, provider: { plugin: 'engine', tier: 'core' },
+  }
+  const result = await hook!(host, input, async e => e)
+  expect(result).toEqual({ ...input, label: '主题', description: '选择配色主题' })
+
+  const noHelp: ConfigDescribeInput = { ...input, description: undefined }
+  expect(await hook!(host, noHelp, async e => e)).toEqual({ ...noHelp, label: '主题', description: undefined })
+
+  const unknown: ConfigDescribeInput = { ...input, key: 'future-setting', label: 'Future' }
+  expect(await hook!(host, unknown, async e => e)).toBe(unknown)
+})
+
+test('localizes toast and notice text while preserving dynamic suffixes', async () => {  type UiTextInput = { text: string | undefined; tool_use_id?: string }
+  type UiTextHook = ($: EngineInterface, e: UiTextInput, next: (e: UiTextInput) => Promise<UiTextInput>) => Promise<UiTextInput>
+  const hooks: Record<string, UiTextHook> = {}
+  const capture = ((event: string, matcherOrHandler: unknown, maybeHandler?: unknown) => {
+    const handler = maybeHandler ?? matcherOrHandler
+    if (event === 'ui.toast' || event === 'ui.notice') hooks[event] = handler as UiTextHook
+    return { catch() {} }
+  }) as unknown as On
+  register(capture, {})
+  expect(hooks['ui.toast']).toBeDefined()
+  expect(hooks['ui.notice']).toBeDefined()
+
+  const selection = { source: 'zh-CN', pack: parseLanguagePack(JSON.stringify(ZH_DATA)) }
+  const host = { state: { get: async () => ({ value: selection, version: 1 }) } } as unknown as EngineInterface
+
+  const toast = await hooks['ui.toast']!(host, { text: 'Update available: 2.1.301' }, async e => e)
+  expect(toast.text).toBe('有可用更新: 2.1.301')
+
+  const notice = await hooks['ui.notice']!(host, { tool_use_id: 'tool-1', text: 'Update available: 2.1.301' }, async e => e)
+  expect(notice.text).toBe('有可用更新: 2.1.301')
+
+  const unknown: UiTextInput = { text: 'Untranslated toast' }
+  expect(await hooks['ui.toast']!(host, unknown, async e => e)).toBe(unknown)
+})
+
+test('reports and clears collected samples through /i18n samples', async ($, on) => {
+  mockWorld(on)
+  await start($)
+  clearSamples()
+  const empty = await $.command.run({ ...COMMAND_CONTEXT, command: 'i18n', args: 'samples' })
+  expect(empty.text).toBe('没有采集到未翻译样本。')
+  const cleared = await $.command.run({ ...COMMAND_CONTEXT, command: 'i18n', args: 'samples clear' })
+  expect(cleared.text).toBe('已清空采集样本。')
 })

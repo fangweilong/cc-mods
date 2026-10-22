@@ -19,6 +19,9 @@ export type CommandMessages = {
   loadFailed: string
   saveFailed: string
   usage: string
+  samplesHeader: string
+  samplesEmpty: string
+  samplesCleared: string
 }
 
 export type TurnDurationMode = 'native' | 'custom'
@@ -36,6 +39,20 @@ export type TurnDurationMessages = {
   elapsed?: string
 }
 
+export type ConfigTranslation = {
+  /** 配置项标签；缺失时保留宿主原文。 */
+  label?: string
+  /** 配置项说明；缺失时保留宿主原文，空字符串可显式移除说明。 */
+  description?: string
+}
+
+export type CommandTranslation = {
+  /** 斜杠命令的一行描述；缺失时保留宿主原文。 */
+  description?: string
+  /** 参数提示；只应翻译占位说明，不能改写用户需要原样输入的取值。 */
+  argumentHint?: string
+}
+
 export type LanguagePack = {
   id: string
   name: string
@@ -49,6 +66,11 @@ export type LanguagePack = {
   modes?: Readonly<Record<string, string>>
   notices?: Readonly<Record<string, string>>
   messages?: Readonly<Record<string, string>>
+  /** 工具完整 description 的精确原文到译文映射。 */
+  tools?: Readonly<Record<string, string>>
+  config?: Readonly<Record<string, ConfigTranslation>>
+  /** 斜杠命令名（不带 /）到展示文案的映射。 */
+  commands?: Readonly<Record<string, CommandTranslation>>
   command: CommandMessages
 }
 

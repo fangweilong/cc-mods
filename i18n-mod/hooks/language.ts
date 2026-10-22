@@ -1,4 +1,4 @@
-import type { HintKey, LanguagePack } from '../types'
+import type { CommandTranslation, ConfigTranslation, HintKey, LanguagePack } from '../types'
 import { ORIGINAL_PACK } from './original'
 
 export const DEFAULT_SOURCE = 'zh-CN'
@@ -6,7 +6,9 @@ const LANGUAGE_ID = /^[a-z]{2,8}(?:-[a-z0-9]{1,8})*$/i
 const HINT_KEYS: readonly HintKey[] = [
   'shortcuts', 'interrupt', 'background', 'expand', 'collapse', 'history', 'cycleMode', 'acceptSuggestion',
 ]
-const PACK_KEYS = ['id', 'name', 'running', 'completed', 'duration', 'turnDuration', 'hints', 'modes', 'notices', 'messages', 'command']
+const PACK_KEYS = ['id', 'name', 'running', 'completed', 'duration', 'turnDuration', 'hints', 'modes', 'notices', 'messages', 'tools', 'config', 'commands', 'command']
+// 命令名沿用宿主的写法：字母数字、下划线、连字符，可带命名空间分隔符。
+const COMMAND_NAME = /^[A-Za-z0-9_:.-]+$/
 
 function object(value: unknown, field: string): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${field}: expected an object`)
@@ -101,8 +103,39 @@ export function parseLanguagePack(content: string, expectedId?: string): Languag
     }
   }
   if (data.hints !== undefined) pack.hints = dictionary(data.hints, 'hints', HINT_KEYS)
-  for (const key of ['modes', 'notices', 'messages'] as const) {
+  for (const key of ['modes', 'notices', 'messages', 'tools'] as const) {
     if (data[key] !== undefined) pack[key] = dictionary(data[key], key)
+  }
+  if (data.config !== undefined) {
+    const entries = Object.entries(object(data.config, 'config'))
+    const configEntries: [string, ConfigTranslation][] = []
+    for (const [key, value] of entries) {
+      const item = object(value, `config.${key}`)
+      for (const field of Object.keys(item)) {
+        if (field !== 'label' && field !== 'description') throw new Error(`config.${key}: unknown key ${field}`)
+      }
+      const translated: ConfigTranslation = {}
+      if (item.label !== undefined) translated.label = text(item.label, `config.${key}.label`)
+      if (item.description !== undefined) translated.description = text(item.description, `config.${key}.description`)
+      configEntries.push([key, translated])
+    }
+    pack.config = Object.fromEntries(configEntries)
+  }
+  if (data.commands !== undefined) {
+    const entries = Object.entries(object(data.commands, 'commands'))
+    const commandEntries: [string, CommandTranslation][] = []
+    for (const [name, value] of entries) {
+      if (!COMMAND_NAME.test(name) || name.startsWith('-')) throw new Error(`commands.${name}: invalid command name`)
+      const item = object(value, `commands.${name}`)
+      for (const field of Object.keys(item)) {
+        if (field !== 'description' && field !== 'argumentHint') throw new Error(`commands.${name}: unknown key ${field}`)
+      }
+      const translated: CommandTranslation = {}
+      if (item.description !== undefined) translated.description = text(item.description, `commands.${name}.description`)
+      if (item.argumentHint !== undefined) translated.argumentHint = text(item.argumentHint, `commands.${name}.argumentHint`)
+      commandEntries.push([name, translated])
+    }
+    pack.commands = Object.fromEntries(commandEntries)
   }
   return pack
 }

@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 import { ORIGINAL_PACK as en } from '../hooks/original'
 import { zhCN } from './fixtures'
-import { formatMessage, translateExact, translateHint, translateNotice, translatePromptHint, translateSingleHint } from '../hooks/translate'
+import { formatMessage, translateCommand, translateConfig, translateExact, translateHint, translateNotice, translatePromptHint, translateSingleHint } from '../hooks/translate'
 
 for (const [original, translated] of [
   ['? for shortcuts', '? 查看快捷键'],
@@ -84,6 +84,29 @@ test('matches notice prefixes and preserves dynamic suffixes', () => {
   expect(translateNotice('Update available for D:/work/project', zhCN.notices)).toBe('有可用更新 for D:/work/project')
   expect(translateNotice('Update availableXYZ', zhCN.notices)).toBe('Update availableXYZ')
   expect(translateNotice('Welcome back!', zhCN.notices)).toBe('欢迎回来！')
+})
+
+test('translates config labels and descriptions without changing missing fields', () => {
+  const entries = {
+    theme: { label: '主题', description: '选择配色主题' },
+    tips: { label: '提示' },
+    verbose: { description: '显示详细日志' },
+  }
+  expect(translateConfig('theme', 'Theme', 'Choose a theme', entries)).toEqual({ label: '主题', description: '选择配色主题' })
+  expect(translateConfig('tips', 'Tips', 'Show tips', entries)).toEqual({ label: '提示', description: 'Show tips' })
+  expect(translateConfig('verbose', 'Verbose', undefined, entries)).toEqual({ label: 'Verbose', description: '显示详细日志' })
+  expect(translateConfig('unknown', 'Unknown', undefined, entries)).toEqual({ label: 'Unknown' })
+})
+
+test('translates slash command display fields and preserves missing ones', () => {
+  const entries = {
+    clear: { description: '清空会话', argumentHint: '[名称]' },
+    compact: { description: '压缩会话' },
+  }
+  expect(translateCommand('clear', 'Clear', '[name]', entries)).toEqual({ description: '清空会话', argumentHint: '[名称]' })
+  expect(translateCommand('compact', 'Compact', undefined, entries)).toEqual({ description: '压缩会话' })
+  expect(translateCommand('unknown', 'Unknown', '[name]', entries)).toEqual({ description: 'Unknown', argumentHint: '[name]' })
+  expect(translateCommand('constructor', 'Constructor', undefined, entries)).toEqual({ description: 'Constructor' })
 })
 
 test('preserves values, unknown placeholders and inherited property names', () => {

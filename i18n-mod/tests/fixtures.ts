@@ -11,10 +11,22 @@ export const ZH_DATA = {
   modes: { focus: '专注模式', 'memory paused': '记忆已暂停' },
   messages: { 'Thinking…': '思考中…' },
   notices: { 'Update available': '有可用更新', 'Welcome back!': '欢迎回来！' },
+  tools: { 'Run a shell command': '运行 Shell 命令' },
+  config: {
+    theme: { label: '主题', description: '选择配色主题' },
+    tips: { label: '提示' },
+  },
+  commands: {
+    clear: { description: '清空会话', argumentHint: '[名称]' },
+    compact: { description: '压缩会话' },
+  },
   command: {
     current: '当前界面语言：{language}', switched: '界面语言已切换为 {language}。',
     loadFailed: '语言包加载失败，已保留当前语言：{reason}', saveFailed: '界面语言保存失败：{reason}',
     reloaded: '语言包已重新加载：{language}。',
+    samplesHeader: '采集到 {count} 条未翻译样本：',
+    samplesEmpty: '没有采集到未翻译样本。',
+    samplesCleared: '已清空采集样本。',
   },
 }
 export const zhCN = parseLanguagePack(JSON.stringify(ZH_DATA))
@@ -63,5 +75,6 @@ export function mockWorld(on: On) {
     world.toasts.push(e.text)
     return { value: undefined }
   })
+  on('ui.invalidate', () => ({ value: undefined }))
   return world
 }

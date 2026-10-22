@@ -3,7 +3,9 @@ import type { LanguageSelection, TurnDurationConfig } from '../types'
 import { DEFAULT_SOURCE, languageCodes, parseLanguagePack, resolveSource } from './language'
 import { ORIGINAL_SELECTION } from './original'
 import { SPINNER_WORDS } from './source'
-import { formatMessage, translateExact, translateHint, translateNotice, translatePromptHint } from './translate'
+import { registerCommandDescribe } from './commands'
+import { clearSamples, collectedSamples, recordSample } from './samples'
+import { formatMessage, translateConfig, translateExact, translateHint, translateNotice, translatePromptHint } from './translate'
 import { createTurnDurationViewModel, normalizeTurnDurationConfig, renderTurnDuration } from './turn-duration'
 
 const selectionRef = { plugin: 'i18n-mod', key: 'selection' } as const
@@ -44,6 +46,10 @@ async function activate($: EngineInterface, selection: LanguageSelection): Promi
     description: selection.pack.command.description,
     argumentHint: '[list | reload | <language or JSON path>]',
   })
+  // 菜单与 /help 会缓存描述；切换语言后必须让宿主重新询问 hook。
+  $.ui.invalidate('command.describe')
+  $.ui.invalidate('config.describe')
+  $.ui.invalidate('tool.describe')
 }
 
 async function selectLanguage($: EngineInterface, source: unknown, current: LanguageSelection): Promise<LanguageSelection> {
@@ -52,6 +58,8 @@ async function selectLanguage($: EngineInterface, source: unknown, current: Lang
 }
 
 export const register: Register = (on, options) => {
+  registerCommandDescribe(on)
+
   // 候选包只在保存期间暂存，避免宿主再次派发 config.set 时重复读取；不作为语言缓存。
   let pendingSelection: LanguageSelection | undefined
   on('session.start', async ($, e, next) => {
@@ -90,7 +98,6 @@ export const register: Register = (on, options) => {
     return saved
   }).catch(($, e, next) => next.called ? next(e) : { deny: 'Turn duration configuration validation failed' })
 
-  // /config 修改前验证文件；自己的命令已验证候选包，跳过重复读取。
   on('config.set', { key: 'i18n-mod.language' }, async ($, e, next) => {
     if (pendingSelection && pendingSelection.source === e.value) return next(e)
     const current = await currentLanguage($)
@@ -130,6 +137,16 @@ export const register: Register = (on, options) => {
         pack.command.usage,
       ].join('\n') }
     }
+    if (argument === 'samples' || argument === 'samples clear') {
+      if (argument === 'samples clear') {
+        clearSamples()
+        return { text: pack.command.samplesCleared }
+      }
+      const collected = collectedSamples()
+      return { text: collected.count === 0
+        ? pack.command.samplesEmpty
+        : `${formatMessage(pack.command.samplesHeader, { count: String(collected.count) })}\n${collected.text}` }
+    }
     let candidate: LanguageSelection
     try {
       candidate = argument === 'reload'
@@ -158,6 +175,60 @@ export const register: Register = (on, options) => {
     }) }
   })
 
+  on('config.describe', async ($, e, next) => {
+    const { pack } = await currentLanguage($)
+    if (pack.preserveOriginal || !pack.config?.[e.key]) return next(e)
+    const translated = translateConfig(e.key, e.label, e.description, pack.config)
+    // 宿主原本没有说明时不新增说明行，只翻译已有内容。
+    return next({
+      ...e,
+      label: translated.label,
+      ...(e.description === undefined ? {} : { description: translated.description }),
+    })
+  })
+
+  on('tool.describe', async ($, e, next) => {
+    const { pack } = await currentLanguage($)
+    const description = translateExact(e.description, pack.tools)
+    return description === e.description ? next(e) : next({ ...e, description })
+  })
+
+  on('ui.toast', async ($, e, next) => {
+    const { pack } = await currentLanguage($)
+    if (pack.preserveOriginal) return next(e)
+    const text = translateNotice(e.text, pack.notices)
+    if (text === e.text) {
+      recordSample('toast', e.text)
+      return next(e)
+    }
+    return next({ ...e, text })
+  })
+
+  on('ui.notice', async ($, e, next) => {
+    if (e.text === undefined) return next(e)
+    const { pack } = await currentLanguage($)
+    if (pack.preserveOriginal) return next(e)
+    const text = translateNotice(e.text, pack.notices)
+    if (text === e.text) {
+      recordSample('notice', e.text)
+      return next(e)
+    }
+    return next({ ...e, text })
+  })
+
+  on('ui.render', { component: 'UserMessage' }, async ($, e, next) => {
+    // 只处理后台任务通知；用户输入、其他会话和 teammate 消息保持原样。
+    if (e.props.origin.kind !== 'task-notification') return next(e)
+    const { pack } = await currentLanguage($)
+    if (pack.preserveOriginal) return next(e)
+    const text = translateNotice(e.props.text, pack.notices)
+    if (text === e.props.text) {
+      recordSample('user-message', e.props.text)
+      return next(e)
+    }
+    return next({ ...e, props: { ...e.props, text } })
+  })
+
   on('ui.render', { component: ['Spinner', 'InfoNotice', 'SessionMode', 'PromptHint', 'ToolProgress', 'TurnDuration'] }, async ($, e, next) => {
     const { pack } = await currentLanguage($)
     if (pack.preserveOriginal) return next(e)
@@ -173,29 +244,44 @@ export const register: Register = (on, options) => {
       case 'Spinner': {
         const word = SPINNER_WORDS.has(e.props.word.toLowerCase()) && pack.running ? pack.running : e.props.word
         const message = e.props.message === null ? null : translateExact(e.props.message, pack.messages)
-        return word === e.props.word && message === e.props.message
-          ? next(e)
-          : next({ ...e, props: { ...e.props, word, message } })
+        if (message !== e.props.message) return next({ ...e, props: { ...e.props, word, message } })
+        if (message !== null) recordSample('spinner', message)
+        return word === e.props.word ? next(e) : next({ ...e, props: { ...e.props, word } })
       }
       case 'InfoNotice': {
         const text = translateNotice(e.props.text, pack.notices)
-        return text === e.props.text ? next(e) : next({ ...e, props: { ...e.props, text } })
+        if (text === e.props.text) {
+          recordSample('info-notice', e.props.text)
+          return next(e)
+        }
+        return next({ ...e, props: { ...e.props, text } })
       }
       case 'SessionMode': {
         const modes = e.props.modes.map(mode => translateExact(mode, pack.modes))
-        return modes.every((mode, index) => mode === e.props.modes[index])
-          ? next(e)
-          : next({ ...e, props: { ...e.props, modes } })
+        const changed = modes.some((mode, index) => mode !== e.props.modes[index])
+        if (!changed) {
+          for (const mode of e.props.modes) recordSample('notice', mode)
+          return next(e)
+        }
+        return next({ ...e, props: { ...e.props, modes } })
       }
       case 'PromptHint': {
         // 改写 hint 会替换原生整行及 tail；仅允许已确认的纯文本组合。
         if (e.props.tail !== undefined) return next(e)
         const hint = translatePromptHint(e.props.hint, pack)
-        return hint === e.props.hint ? next(e) : next({ ...e, props: { ...e.props, hint } })
+        if (hint === e.props.hint) {
+          if (/^[\x20-\x7e]{1,200}$/u.test(e.props.hint)) recordSample('prompt-hint', e.props.hint)
+          return next(e)
+        }
+        return next({ ...e, props: { ...e.props, hint } })
       }
       case 'ToolProgress': {
         const hint = translateHint(e.props.hint, pack)
-        return hint === e.props.hint ? next(e) : next({ ...e, props: { ...e.props, hint } })
+        if (hint === e.props.hint) {
+          recordSample('notice', e.props.hint)
+          return next(e)
+        }
+        return next({ ...e, props: { ...e.props, hint } })
       }
     }
   })

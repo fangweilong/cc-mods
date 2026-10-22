@@ -45,6 +45,31 @@ test('supports BOM and partial command translations with original-text fallback'
   expect(pack.command.current).toBe('当前界面语言：{language}')
   expect(pack.command.description).toBe(ORIGINAL_PACK.command.description)
   expect(pack.hints?.interrupt).toBe('中断')
+  expect(pack.tools?.['Run a shell command']).toBe('运行 Shell 命令')
+})
+
+test('parses optional config row translations with per-field fallback', () => {
+  const pack = parseLanguagePack(JSON.stringify({
+    ...JA_DATA,
+    tools: { 'Run a shell command': '运行 Shell 命令' },
+    config: { theme: { label: '主题', description: '选择配色主题' }, tips: { description: '显示提示' } },
+  }))
+  expect(pack.tools).toEqual({ 'Run a shell command': '运行 Shell 命令' })
+  expect(pack.config).toEqual({
+    theme: { label: '主题', description: '选择配色主题' },
+    tips: { description: '显示提示' },
+  })
+})
+
+test('parses slash command translations with per-field fallback', () => {
+  const pack = parseLanguagePack(JSON.stringify({
+    ...JA_DATA,
+    commands: { clear: { description: '清空会话', argumentHint: '[名称]' }, compact: { description: '压缩会话' } },
+  }))
+  expect(pack.commands).toEqual({
+    clear: { description: '清空会话', argumentHint: '[名称]' },
+    compact: { description: '压缩会话' },
+  })
 })
 
 for (const value of [
@@ -52,7 +77,15 @@ for (const value of [
   { ...JA_DATA, running: 1 }, { ...JA_DATA, completed: false }, { ...JA_DATA, duration: [] },
   { ...JA_DATA, duration: '{word}' }, { ...JA_DATA, hints: [] }, { ...JA_DATA, hints: { shortcuts: 1 } },
   { ...JA_DATA, hints: { typo: 'value' } }, { ...JA_DATA, modes: { focus: null } },
-  { ...JA_DATA, notices: true }, { ...JA_DATA, messages: { Thinking: { bad: true } } },
+  { ...JA_DATA, notices: true }, { ...JA_DATA, messages: { Thinking: { bad: true } } }, { ...JA_DATA, tools: { Bash: 1 } },
+  { ...JA_DATA, config: { theme: { options: [] } } },
+  { ...JA_DATA, config: [] }, { ...JA_DATA, config: { theme: [] } },
+  { ...JA_DATA, config: { theme: { unknown: 'value' } } },
+  { ...JA_DATA, config: { theme: { label: 1 } } }, { ...JA_DATA, config: { theme: { description: false } } },
+  { ...JA_DATA, commands: [] }, { ...JA_DATA, commands: { clear: [] } },
+  { ...JA_DATA, commands: { clear: { unknown: 'value' } } },
+  { ...JA_DATA, commands: { clear: { description: 1 } } }, { ...JA_DATA, commands: { 'bad/name': { description: 'x' } } },
+  { ...JA_DATA, commands: { clear: { argumentHint: false } } },
   { ...JA_DATA, command: { current: [] } }, { ...JA_DATA, command: { typo: 'value' } },
   { ...JA_DATA, preserveOriginal: true }, { ...JA_DATA, spinnerWords: ['Working'] },
   { ...JA_DATA, name: 'Bad' + String.fromCharCode(27) },
