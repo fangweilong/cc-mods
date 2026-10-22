@@ -1,0 +1,5 @@
+{
+  "name": "notification-mod",
+  "version": "0.1.0",
+  "description": "Notify when the main Claude Code turn succeeds or fails."
+}

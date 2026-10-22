@@ -1,0 +1,9 @@
+{
+  "name": "project-files",
+  "version": "0.1.0",
+  "author": {
+    "name": "teler"
+  },
+  "description": "Browse and preview files under the current session directory.",
+  "types": "./types/index.d.ts"
+}

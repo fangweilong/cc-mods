@@ -16,7 +16,7 @@ Claude Code Mod 集合，提供状态栏、Subagent 实时面板、用户输入�
 
 | 配置区域 | 可视化设置 |
 | --- | --- |
-| 状态栏与配置面板 | `en` / `zh` 显示语言、状态栏位置（现有位置 / 输入框下方）、显示模式（完整 / 简洁）、模块开关和顺序 |
+| 状态栏与配置面板 | `en` / `zh` 显示语言、状态栏位置（现有位置 / 输入框下方）、显示模式（完整 / 简洁）、模块开关和顺序；新增回合步骤、回合原因、工具次数开关 |
 | 时间显示 | 插件启用开关、TPS/Token 显示开关、时间格式规则；显示用户消息发送时间、工具调用耗时与 Token、每段回答的 TPS |
 | 用户输入框 | 标题、颜色、横竖线和四角符号 |
 | 语言与时间 → i18n | 语言代码或 JSON 路径、简体中文/English 原生语言选择器、重新加载已保存的语言包；耗时行原生/自定义、显隐、顶部间距及取消草稿 |
@@ -33,11 +33,14 @@ Claude Code Mod 集合，提供状态栏、Subagent 实时面板、用户输入�
 | 目录 | Mod 名称 | 作用 |
 | --- | --- | --- |
 | `cc-mods-config/` | `cc-mods-config` | 独立的全仓库统一可视化配置面板，管理状态栏、输入框与 i18n 配置；不依赖任何功能 Mod。 |
-| `statusline-mod/` | `statusline-mod` | 使用 Claude Code 原生 Mod UI 渲染两行状态区域，展示模型、会话状态、运行环境、Git 分支与增删统计、Context、Token、缓存命中、配额、成本和工作目录；同时显示运行中的 Subagent 摘要，不包含配置面板。 |
+| `statusline-mod/` | `statusline-mod` | 使用 Claude Code 原生 Mod UI 渲染两行状态区域，展示模型、会话状态、运行环境、Git 分支与增删统计、Context、Token、缓存命中、配额、成本、工作目录及可选的回合步骤/结束原因/工具次数；同时显示运行中的 Subagent 摘要，不包含配置面板。 |
 | `subagent-split-view/` | `subagent-split-view` | 在 Claude Code 右侧打开实时 Subagent 面板，展示 Subagent 的名称、类型、模型、任务、当前活动、thinking/text 流、工具调用及执行结果；Subagent 全部结束后自动关闭面板。 |
-| `i18n-mod/` | `i18n-mod` | 汉化已开放的运行状态、快捷键、模式及部分提示；耗时默认原生，可手动启用中性自定义耗时行。按需读取 JSON 语言包，支持简体中文与 English 原文模式；通过统一 `/my-cc-mods-config` 面板选择语言及耗时设置，新增语言无需注册。 |
+| `i18n-mod/` | `i18n-mod` | 汉化已开放的运行状态、快捷键、模式、部分提示、`/config` 标签/说明、斜杠命令描述与精确工具描述；耗时默认原生，可手动启用中性自定义耗时行。按需读取 JSON 语言包，支持简体中文与 English 原文模式；通过统一 `/my-cc-mods-config` 面板选择语言及耗时设置，新增语言无需注册。 |
 | `timestamp-mod/` | `timestamp-mod` | 显示用户消息时间、工具调用耗时与该请求的 Token 用量，以及每段回答的实时/精确 TPS；通过统一配置面板控制启用状态、TPS 开关与时间格式。 |
 | `user-prompt-frame/` | `user-prompt-frame` | 为用户消息添加“用户输入”边框，按终端宽度自适应，并按终端显示宽度处理中文、英文和 Emoji 混排；任务通知、其他会话消息和 Agent 消息仍使用 Claude Code 默认渲染。 |
+| `todo-panel/` | `todo-panel` | 监听成功的 `TodoWrite` 工具调用，自动打开独立 Todo 进度 Pane；与 Subagent 面板分离。 |
+| `notification-mod/` | `notification-mod` | 主会话完成或失败时使用 `$.ui.notify` 发送成功/失败通知；主动中断和 Subagent 不通知。 |
+| `project-files/` | `project-files` | 通过 `/project-files` 打开独立文件浏览 Pane，使用 `$.fs` 浏览当前项目目录和预览文件。 |
 
 ### 各 Mod 的边界
 
@@ -47,6 +50,9 @@ Claude Code Mod 集合，提供状态栏、Subagent 实时面板、用户输入�
 - `subagent-split-view` 只观察和渲染 Subagent 事件，不创建 Agent、不修改 Agent 参数、不改变权限或工具执行结果；日志只保存在当前 Claude Code 进程内，每个 Agent 最多保留 120 条。
 - `i18n-mod` 只改变已开放的界面提示，不翻译会话内容、不调用模型；主动保存时通过宿主 `userConfig` 保存自己的语言和耗时行选项。耗时默认原生，自定义是独立契约，不等价于原生全部行为。权限弹窗不在覆盖范围内；与 `statusline-mod` 同用时，原生快捷键提示仍被后者隐藏。
 - `user-prompt-frame` 只改变符合用户输入条件的 `UserMessage` 渲染，不改变消息内容或会话行为。
+- `todo-panel` 只观察成功的 `TodoWrite` 工具结果并渲染独立任务面板，不修改任务数据，不处理 Subagent transcript。
+- `notification-mod` 只观察主会话 `turn.complete` 并调用 `$.ui.notify`；不判断 OS 窗口焦点，不通知 Subagent，不回退 toast。
+- `project-files` 只在当前 session cwd 范围内通过 `$.fs` 浏览和预览文件，不调用外部进程或创建 OS 窗口。
 
 ## 环境要求
 
@@ -73,6 +79,9 @@ claude --plugin-dir ".\subagent-split-view"
 claude --plugin-dir ".\user-prompt-frame"
 claude --plugin-dir ".\i18n-mod"
 claude --plugin-dir ".\timestamp-mod"
+claude --plugin-dir ".\todo-panel"
+claude --plugin-dir ".\notification-mod"
+claude --plugin-dir ".\project-files"
 ```
 
 也可以使用绝对路径：
@@ -84,6 +93,9 @@ claude --plugin-dir "D:\Codes\other\cc-mods\subagent-split-view"
 claude --plugin-dir "D:\Codes\other\cc-mods\user-prompt-frame"
 claude --plugin-dir "D:\Codes\other\cc-mods\i18n-mod"
 claude --plugin-dir "D:\Codes\other\cc-mods\timestamp-mod"
+claude --plugin-dir "D:\Codes\other\cc-mods\todo-panel"
+claude --plugin-dir "D:\Codes\other\cc-mods\notification-mod"
+claude --plugin-dir "D:\Codes\other\cc-mods\project-files"
 ```
 
 需要面板和功能 Mod 同时可用时，在同一次启动中加载各目录，例如不加载状态栏、只配置输入框和 i18n：
@@ -232,6 +244,32 @@ macOS/Linux 示例：
 
 支持占位符 `YYYY`、`YY`、`MM`、`DD`、`HH`、`mm`、`ss`、`SSS`，其他字符原样保留。配置保存在统一配置文件的 `timestamp` 段。
 
+### `todo-panel`
+
+成功捕获 `TodoWrite` 工具结果后自动打开独立任务面板，也可以手动打开：
+
+```text
+/todo-panel
+/todo-panel clear
+/todo-panel close
+```
+
+### `notification-mod`
+
+主会话完成或失败时调用 `$.ui.notify`；主动中断和 Subagent 不通知。当前 API 不能可靠判断 OS 窗口焦点，因此不宣称只在后台窗口提醒。
+
+### `project-files`
+
+通过命令打开当前项目的独立文件浏览面板：
+
+```text
+/project-files
+/project-files refresh
+/project-files close
+```
+
+面板只读取 session cwd 范围内的目录和文件，不创建外部终端窗口。
+
 ### `subagent-split-view`
 
 Subagent 启动后会自动尝试打开右侧面板，也可以手动打开：
@@ -254,7 +292,7 @@ Subagent 启动后会自动尝试打开右侧面板，也可以手动打开：
 
 新增语言只需提供 JSON 文件，不必修改注册表；只缓存当前包。English 原文模式和缺失译文保留原生文案，不改变用户输入、模型回复或工具结果。`/i18n`、`/config` 仍可作为高级兼容入口，日常配置无需使用它们。
 
-当前提供 **5 类原生提示翻译**：运行状态、输入框快捷提示、工具后台运行提示、模式标签和部分通知；另有 **1 类可选自定义耗时行**，以及 `/i18n` 自身的 10 条控制文案。完整数量及边界见 [当前已支持的 i18n](./i18n-mod/README.md#当前已支持的-i18n)。状态栏和配置面板自身的 `en` / `zh` 文案仍独立维护，不属于 i18n JSON 语言包；与 `statusline-mod` 同用时，原生输入框快捷提示仍被隐藏。PromptHint 仅在无 `tail` 且整行片段均为已确认静态文本时翻译；含任务按钮、链接或未知片段时原样透传，不牺牲交互来强制汉化。
+当前提供 **8 类原生提示/事件翻译**：运行状态、输入框快捷提示、工具后台运行提示、模式标签、部分通知、后台任务通知、toast 与工具 notice；另有 **1 类可选自定义耗时行**、`/config` 标签与说明、斜杠命令描述，以及 `/i18n` 自身的控制文案。完整数量及边界见 [当前已支持的 i18n](./i18n-mod/README.md#当前已支持的-i18n)。原生 `/config` 行内的布尔/枚举取值、`/status`、`/usage`、`/stats` 面板和命令执行后的交互面板没有对应 hook，不在覆盖范围内。状态栏和配置面板自身的 `en` / `zh` 文案仍独立维护，不属于 i18n JSON 语言包；与 `statusline-mod` 同用时，原生输入框快捷提示仍被隐藏。PromptHint 仅在无 `tail` 且整行片段均为已确认静态文本时翻译；含任务按钮、链接或未知片段时原样透传，不牺牲交互来强制汉化。未命中英文可通过 `/i18n samples` 在会话内采集，样本不写盘。
 
 #### 可选自定义耗时行（仅 terminal）
 

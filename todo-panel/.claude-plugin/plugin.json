@@ -1,0 +1,9 @@
+{
+  "name": "todo-panel",
+  "version": "0.1.0",
+  "author": {
+    "name": "teler"
+  },
+  "description": "Show the current TodoWrite task list in a standalone pane.",
+  "types": "./types/index.d.ts"
+}
