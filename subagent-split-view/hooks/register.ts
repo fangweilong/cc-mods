@@ -7,10 +7,22 @@ import type {
 } from 'claude-code'
 
 const PANE_ID = 'subagent-split-view'
-const MAX_LOG_ENTRIES = 120
-const MAX_VISIBLE_AGENTS = 12
-const MAX_FINISHED_AGENTS = 6
 const MAX_ENTRY_LENGTH = 220
+
+export type SubagentViewConfig = {
+  maxVisibleAgents: number
+  maxFinishedAgents: number
+  maxLogEntries: number
+}
+
+export const DEFAULT_SUBAGENT_VIEW_CONFIG: SubagentViewConfig = {
+  maxVisibleAgents: 12,
+  maxFinishedAgents: 6,
+  maxLogEntries: 120,
+}
+
+let config: SubagentViewConfig = { ...DEFAULT_SUBAGENT_VIEW_CONFIG }
+let configPath = ''
 
 const FINISHED_STATUSES = new Set([
   'completed',
@@ -69,6 +81,45 @@ function clipText(value: string, maxLength = MAX_ENTRY_LENGTH): string {
   return text.length > maxLength ? `${text.slice(0, maxLength - 3)}...` : text
 }
 
+export function normalizeSubagentViewConfig(value: unknown): SubagentViewConfig {
+  const result = { ...DEFAULT_SUBAGENT_VIEW_CONFIG }
+  if (!value || typeof value !== 'object') return result
+
+  const root = value as Record<string, unknown>
+  const data = (root.subagentSplitView && typeof root.subagentSplitView === 'object'
+    ? root.subagentSplitView
+    : root) as Record<string, unknown>
+
+  if (typeof data.maxVisibleAgents === 'number' && Number.isFinite(data.maxVisibleAgents)) {
+    result.maxVisibleAgents = Math.min(50, Math.max(1, Math.round(data.maxVisibleAgents)))
+  }
+  if (typeof data.maxFinishedAgents === 'number' && Number.isFinite(data.maxFinishedAgents)) {
+    result.maxFinishedAgents = Math.min(50, Math.max(0, Math.round(data.maxFinishedAgents)))
+  }
+  if (typeof data.maxLogEntries === 'number' && Number.isFinite(data.maxLogEntries)) {
+    result.maxLogEntries = Math.min(500, Math.max(20, Math.round(data.maxLogEntries)))
+  }
+  return result
+}
+
+function normalizePath(path: string): string {
+  const normalized = path.replace(/[\\/]+/gu, '/').replace(/\/$/u, '')
+  return /^[A-Za-z]:/u.test(normalized) ? normalized.toLowerCase() : normalized
+}
+
+async function loadConfig($: EngineInterface): Promise<void> {
+  const home = (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE')) ?? ''
+  configPath = home ? `${home.replace(/[\\/]+$/u, '')}/.config/my-cc-mods/config.json` : ''
+  config = { ...DEFAULT_SUBAGENT_VIEW_CONFIG }
+  if (!configPath) return
+  try {
+    const content = await $.fs.read(configPath)
+    if (typeof content === 'string') config = normalizeSubagentViewConfig(JSON.parse(content))
+  } catch {
+    config = { ...DEFAULT_SUBAGENT_VIEW_CONFIG }
+  }
+}
+
 export function isFinishedAgentStatus(status: string): boolean {
   return FINISHED_STATUSES.has(status.toLowerCase())
 }
@@ -120,8 +171,8 @@ function appendLog(agentId: string, kind: LogKind, text: string): void {
   }
 
   panel.entries.push({ kind, text: value })
-  if (panel.entries.length > MAX_LOG_ENTRIES) {
-    panel.entries.splice(0, panel.entries.length - MAX_LOG_ENTRIES)
+  if (panel.entries.length > config.maxLogEntries) {
+    panel.entries.splice(0, panel.entries.length - config.maxLogEntries)
   }
 }
 
@@ -134,7 +185,7 @@ function pruneFinished(): void {
   const finished = [...panels.values()]
     .filter(panel => panel.finishedAt !== undefined)
     .sort((left, right) => (left.finishedAt ?? 0) - (right.finishedAt ?? 0))
-  while (finished.length > MAX_FINISHED_AGENTS) {
+  while (finished.length > config.maxFinishedAgents) {
     const panel = finished.shift()
     if (panel) panels.delete(panel.info.id)
   }
@@ -198,7 +249,7 @@ function orderedPanels(): AgentPanel[] {
       if (leftRunning !== rightRunning) return leftRunning ? -1 : 1
       return left.info.id.localeCompare(right.info.id)
     })
-    .slice(0, MAX_VISIBLE_AGENTS)
+    .slice(0, config.maxVisibleAgents)
 }
 
 export function formatPanelHeader(panelsCount: number, runningCount: number): string {
@@ -331,10 +382,20 @@ async function openPane($: EngineInterface): Promise<void> {
 export const register: Register = on => {
   on('ui.render', { component: 'Pane', requestId: PANE_ID }, ($, e) => renderPanel($, e))
 
+  on('fs.write', async ($, e, next) => {
+    if (configPath && normalizePath(e.path) === normalizePath(configPath)) {
+      await loadConfig($)
+      pruneFinished()
+      invalidate($)
+    }
+    return next(e)
+  })
+
   on('session.start', async ($, e, next) => {
     panels.clear()
     viewedAgentId = undefined
     paneOpenRequested = false
+    await loadConfig($)
     await $.command.register({
       name: 'subagent-view',
       description: 'Open the live Subagent pane. Click "查看转录" to open the native transcript. Use "clear" to forget tracked agents.',
@@ -446,6 +507,7 @@ export const register: Register = on => {
         }
         panel.finishedAt ??= Date.now()
         setActivity(e.agentId, e.reason === 'error' ? 'failed' : 'completed')
+        pruneFinished()
       }
       invalidate($)
     }

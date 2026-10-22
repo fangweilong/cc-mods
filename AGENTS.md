@@ -68,7 +68,8 @@ claude --plugin-dir ".\cc-mods-config" --plugin-dir ".\tool-output"
 ## 核心约定
 
 - **所有用户可调项统一接入 `/my-cc-mods-config` 面板**，不要为单个 Mod 新增独立配置命令作为主入口。
-- 状态栏、输入框、时间、工具输出配置保存在 `~/.config/my-cc-mods/config.json`。
+- 状态栏、输入框、时间、工具输出、文件浏览与 Subagent 配置保存在 `~/.config/my-cc-mods/config.json` 的 `timestamp`、`toolOutput`、`subagentSplitView`、`projectFiles` 等段。
+- 新增可调项时，功能 Mod 与 `cc-mods-config` 各自维护同一套默认值与夹取范围；功能 Mod 通过 `fs.write` 热重载，不跨目录 import。
 - i18n 语言与耗时行选项通过宿主 `userConfig`（`settings.json`）保存，不复制到上述 JSON。
 - 各 Mod 独立读取自己的设置，不通过 `cc-mods-config` 的运行时状态获取配置；配置读取与规范化逻辑可各自保留副本。
 - 面板保存不是跨存储的原子事务；失败时需报告部分保存并保留未提交草稿。

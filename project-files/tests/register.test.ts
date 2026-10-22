@@ -1,5 +1,5 @@
-import { expect, test } from 'claude-code/testing'
-import { isPathInside, previewKindFor, register, truncatePreview } from '../hooks/register'
+import { expect, mock, test } from 'claude-code/testing'
+import { isPathInside, normalizeProjectFilesConfig, previewKindFor, register, truncatePreview } from '../hooks/register'
 
 const paneProps = {
   title: '项目文件',
@@ -20,7 +20,9 @@ function mockFs(on: Parameters<typeof register>[0]) {
     closed: 0,
     readContent: '# hello' as string | undefined,
     binary: false,
+    configText: undefined as string | undefined,
   }
+  mock.env(on, { HOME: '/test-home' })
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('session.cwd', () => ({ value: world.cwd }))
   on('command.register', () => ({ value: { command: 'project-files' } }))
@@ -52,6 +54,7 @@ function mockFs(on: Parameters<typeof register>[0]) {
   })
   on('fs.read', ($, e) => {
     world.reads.push(e.path)
+    if (/[\\/]\.config[\\/]my-cc-mods[\\/]config\.json$/u.test(e.path)) return { value: world.configText }
     const content = world.binary
       ? String.fromCharCode(0xff, 0xfe)
       : (world.readContent ?? '# hello')
@@ -59,6 +62,27 @@ function mockFs(on: Parameters<typeof register>[0]) {
   })
   return world
 }
+
+test('applies preview limits from the unified config file', async ($, on) => {
+  const world = mockFs(on)
+  world.configText = JSON.stringify({ projectFiles: { maxPreviewChars: 1_000 } })
+  world.readContent = 'x'.repeat(2_000)
+  await $.session.start({ cwd: world.cwd, surface: 'terminal', isInteractive: true })
+  await $.command.run({ origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 120 }, command: 'project-files', args: '' })
+  const ui = await $.ui.mount({
+    plugin: 'project-files',
+    surface: 'terminal',
+    component: 'Pane',
+    requestId: 'project-files',
+    props: paneProps,
+  })
+
+  await ui.press({ key: 'project-files-entry-README.md' })
+  const markdown = await ui.find({ type: 'Markdown' })
+  expect(markdown?.props.text).toContain('…（内容已截断）')
+  expect(markdown?.props.text.length).toBe(1_009)
+  await ui.unmount()
+})
 
 test('rejects parent traversal and paths outside the session directory', () => {
   expect(isPathInside('C:/work/project', 'C:/work/project/src')).toBe(true)
@@ -70,6 +94,21 @@ test('truncates long previews with an explicit marker', () => {
   const result = truncatePreview('x'.repeat(60_001))
   expect(result.endsWith('…（内容已截断）')).toBe(true)
   expect(result.length).toBe(60_009)
+  expect(truncatePreview('x'.repeat(21), 20)).toBe(`${'x'.repeat(20)}\n…（内容已截断）`)
+})
+
+test('normalizes file browser limits and clamps invalid values', () => {
+  expect(normalizeProjectFilesConfig({})).toEqual({ maxPreviewChars: 60_000, maxListEntries: 200 })
+  expect(normalizeProjectFilesConfig({
+    projectFiles: { maxPreviewChars: 120_000, maxListEntries: 500 },
+  })).toEqual({ maxPreviewChars: 120_000, maxListEntries: 500 })
+  expect(normalizeProjectFilesConfig({
+    projectFiles: { maxPreviewChars: 10, maxListEntries: 99_999 },
+  })).toEqual({ maxPreviewChars: 1_000, maxListEntries: 2_000 })
+  expect(normalizeProjectFilesConfig({ maxPreviewChars: '120000' })).toEqual({
+    maxPreviewChars: 60_000,
+    maxListEntries: 200,
+  })
 })
 
 test('classifies previews by file type', () => {

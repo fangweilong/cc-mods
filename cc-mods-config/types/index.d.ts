@@ -66,10 +66,26 @@ export type ToolOutputConfig = {
   keepErrorsExpanded: boolean
 }
 
+export type SubagentViewConfig = {
+  maxVisibleAgents: number
+  maxFinishedAgents: number
+  maxLogEntries: number
+}
+
+export type ProjectFilesConfig = {
+  maxPreviewChars: number
+  maxListEntries: number
+}
+
 declare module 'claude-code' {
   interface PluginState {
     'cc-mods-config': {
-      config: StatuslineConfig & { timestamp: TimestampConfig; toolOutput: ToolOutputConfig }
+      config: StatuslineConfig & {
+        timestamp: TimestampConfig
+        toolOutput: ToolOutputConfig
+        subagentSplitView: SubagentViewConfig
+        projectFiles: ProjectFilesConfig
+      }
       i18nDraft: I18nConfigDraft
       turnDurationDraft: TurnDurationConfigDraft
     }

@@ -1,9 +1,20 @@
 import type { EngineInterface, FsEntry, FsStat, Register, RenderSurface } from 'claude-code'
 
 const PANE_ID = 'project-files'
-const MAX_PREVIEW_LENGTH = 60_000
-const MAX_LIST_ENTRIES = 200
 const BINARY_MESSAGE = '该文件不是可预览的 UTF-8 文本。'
+
+export type ProjectFilesConfig = {
+  maxPreviewChars: number
+  maxListEntries: number
+}
+
+export const DEFAULT_PROJECT_FILES_CONFIG: ProjectFilesConfig = {
+  maxPreviewChars: 60_000,
+  maxListEntries: 200,
+}
+
+let config: ProjectFilesConfig = { ...DEFAULT_PROJECT_FILES_CONFIG }
+let configPath = ''
 
 type PreviewKind = 'text' | 'markdown' | 'code' | 'diff' | 'image' | 'binary'
 
@@ -73,6 +84,37 @@ function normalizePath(path: string): string {
   return path.replace(/[\\/]+/gu, '/')
 }
 
+export function normalizeProjectFilesConfig(value: unknown): ProjectFilesConfig {
+  const result = { ...DEFAULT_PROJECT_FILES_CONFIG }
+  if (!value || typeof value !== 'object') return result
+
+  const root = value as Record<string, unknown>
+  const data = (root.projectFiles && typeof root.projectFiles === 'object'
+    ? root.projectFiles
+    : root) as Record<string, unknown>
+
+  if (typeof data.maxPreviewChars === 'number' && Number.isFinite(data.maxPreviewChars)) {
+    result.maxPreviewChars = Math.min(1_000_000, Math.max(1_000, Math.round(data.maxPreviewChars)))
+  }
+  if (typeof data.maxListEntries === 'number' && Number.isFinite(data.maxListEntries)) {
+    result.maxListEntries = Math.min(2_000, Math.max(10, Math.round(data.maxListEntries)))
+  }
+  return result
+}
+
+async function loadConfig($: EngineInterface): Promise<void> {
+  const home = (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE')) ?? ''
+  configPath = home ? `${home.replace(/[\\/]+$/u, '')}/.config/my-cc-mods/config.json` : ''
+  config = { ...DEFAULT_PROJECT_FILES_CONFIG }
+  if (!configPath) return
+  try {
+    const content = await $.fs.read(configPath)
+    if (typeof content === 'string') config = normalizeProjectFilesConfig(JSON.parse(content))
+  } catch {
+    config = { ...DEFAULT_PROJECT_FILES_CONFIG }
+  }
+}
+
 function pathKey(path: string): string {
   const normalized = normalizePath(path).replace(/\/$/u, '')
   return /^[A-Za-z]:/u.test(normalized) ? normalized.toLowerCase() : normalized
@@ -119,8 +161,12 @@ export function languageFor(name: string): string | undefined {
 }
 
 function clipText(text: string): string {
-  return text.length > MAX_PREVIEW_LENGTH
-    ? `${text.slice(0, MAX_PREVIEW_LENGTH)}\n…（内容已截断）`
+  return truncatePreview(text)
+}
+
+export function truncatePreview(text: string, maxLength = config.maxPreviewChars): string {
+  return text.length > maxLength
+    ? `${text.slice(0, maxLength)}\n…（内容已截断）`
     : text
 }
 
@@ -176,7 +222,7 @@ async function listDirectory($: EngineInterface, root: string, path: string): Pr
       if (left.kind !== right.kind) return left.kind === 'dir' ? -1 : 1
       return left.name.localeCompare(right.name)
     })
-    .slice(0, MAX_LIST_ENTRIES)
+    .slice(0, config.maxListEntries)
 }
 
 async function loadDirectory($: EngineInterface, path: string): Promise<void> {
@@ -363,14 +409,16 @@ export function isPathInside(root: string, candidate: string): boolean {
   return !hasParentSegment(candidate) && isInside(root, candidate)
 }
 
-export function truncatePreview(text: string): string {
-  return clipText(text)
-}
-
 export const register: Register = on => {
   on('ui.render', { component: 'Pane', requestId: PANE_ID }, ($, e) => renderPane($, e))
 
+  on('fs.write', async ($, e, next) => {
+    if (configPath && pathKey(e.path) === pathKey(configPath)) await loadConfig($)
+    return next(e)
+  })
+
   on('session.start', async ($, e, next) => {
+    await loadConfig($)
     const root = await sessionRoot($)
     state = { root, current: root, entries: [], loading: false }
     await $.command.register({

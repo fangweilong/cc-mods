@@ -79,7 +79,7 @@ function mountConfig($: Engine, surface: 'terminal' | 'desktop' = 'terminal') {
     props: { title: 'CC Mods Config', isFocused: true, bodyColumns: 120, placement: 'inline', scroll: { offset: 0, bodyRows: 80 }, view: {} },
   })
 }
-async function selectTab(ui: Awaited<ReturnType<typeof mountConfig>>, tab: 'statusline' | 'prompt-frame' | 'language-time' | 'subagents'): Promise<void> {
+async function selectTab(ui: Awaited<ReturnType<typeof mountConfig>>, tab: 'statusline' | 'prompt-frame' | 'language-time' | 'tool-output' | 'project-files' | 'subagents'): Promise<void> {
   await ui.press({ key: `config-tab-${tab}` })
 }
 
@@ -112,6 +112,8 @@ for (const surface of ['terminal', 'desktop'] as const) {
         ['statusline', 'statusline-config-section', language === 'zh' ? 'statusline-mod · 状态栏' : 'statusline-mod · Statusline'],
         ['prompt-frame', 'prompt-frame-config-section', language === 'zh' ? 'user-prompt-frame · 用户输入框' : 'user-prompt-frame · User prompt frame'],
         ['language-time', 'language-time-config-section', language === 'zh' ? 'i18n-mod · 原生界面语言' : 'i18n-mod · Native UI language'],
+        ['tool-output', 'tool-output-config-section', language === 'zh' ? 'tool-output · 工具结果' : 'tool-output · Tool results'],
+        ['project-files', 'project-files-config-section', language === 'zh' ? 'project-files · 文件浏览' : 'project-files · File browser'],
         ['subagents', 'subagent-config-section', language === 'zh' ? 'subagent-split-view · Subagent 面板' : 'subagent-split-view · Subagent pane'],
       ] as const
       for (const [tab, key, heading] of tabs) {
@@ -221,6 +223,73 @@ for (const surface of ['terminal', 'desktop'] as const) {
       await restored.unmount()
     })
   }
+}
+
+test('normalizes pane and file browser limits and defaults missing sections', () => {
+  expect(normalizeConfig({}).subagentSplitView).toEqual(DEFAULT_CONFIG.subagentSplitView)
+  expect(normalizeConfig({}).projectFiles).toEqual(DEFAULT_CONFIG.projectFiles)
+  expect(normalizeConfig({
+    subagentSplitView: { maxVisibleAgents: 24, maxFinishedAgents: 0, maxLogEntries: 240 },
+    projectFiles: { maxPreviewChars: 120_000, maxListEntries: 500 },
+  })).toMatchObject({
+    subagentSplitView: { maxVisibleAgents: 24, maxFinishedAgents: 0, maxLogEntries: 240 },
+    projectFiles: { maxPreviewChars: 120_000, maxListEntries: 500 },
+  })
+  expect(normalizeConfig({
+    subagentSplitView: { maxVisibleAgents: 0, maxFinishedAgents: -1, maxLogEntries: 9_999 },
+    projectFiles: { maxPreviewChars: 10, maxListEntries: 99_999 },
+  })).toMatchObject({
+    subagentSplitView: { maxVisibleAgents: 1, maxFinishedAgents: 0, maxLogEntries: 500 },
+    projectFiles: { maxPreviewChars: 1_000, maxListEntries: 2_000 },
+  })
+  expect(normalizeConfig({
+    subagentSplitView: { maxVisibleAgents: '24' },
+    projectFiles: { maxPreviewChars: '120000' },
+  })).toMatchObject({
+    subagentSplitView: DEFAULT_CONFIG.subagentSplitView,
+    projectFiles: DEFAULT_CONFIG.projectFiles,
+  })
+})
+
+for (const surface of ['terminal', 'desktop'] as const) {
+  test(`stages, saves and reopens pane and file browser limits on ${surface}`, async ($, on) => {
+    const world = mockConfig(on)
+    world.file = JSON.stringify({ language: 'zh' })
+    await openConfig($)
+    const ui = await mountConfig($, surface)
+
+    await selectTab(ui, 'subagents')
+    expect((await ui.find({ key: 'subagent-max-visible' }))?.props.value).toBe('12')
+    expect((await ui.find({ key: 'subagent-max-finished' }))?.props.value).toBe('6')
+    expect((await ui.find({ key: 'subagent-max-log-entries' }))?.props.value).toBe('120')
+    await ui.select({ key: 'subagent-max-visible', value: '24' })
+    await ui.select({ key: 'subagent-max-finished', value: '0' })
+    await ui.select({ key: 'subagent-max-log-entries', value: '240' })
+
+    await selectTab(ui, 'project-files')
+    expect((await ui.find({ key: 'project-files-max-preview' }))?.props.value).toBe('60000')
+    expect((await ui.find({ key: 'project-files-max-list' }))?.props.value).toBe('200')
+    await ui.select({ key: 'project-files-max-preview', value: '120000' })
+    await ui.select({ key: 'project-files-max-list', value: '500' })
+
+    expect(world.writes).toEqual([])
+    await ui.press({ key: 'save-config' })
+    const saved = JSON.parse(world.writes[0]!)
+    expect(saved.subagentSplitView).toEqual({ maxVisibleAgents: 24, maxFinishedAgents: 0, maxLogEntries: 240 })
+    expect(saved.projectFiles).toEqual({ maxPreviewChars: 120_000, maxListEntries: 500 })
+    await ui.unmount()
+
+    await openConfig($)
+    const reopened = await mountConfig($, surface)
+    await selectTab(reopened, 'subagents')
+    expect((await reopened.find({ key: 'subagent-max-visible' }))?.props.value).toBe('24')
+    expect((await reopened.find({ key: 'subagent-max-finished' }))?.props.value).toBe('0')
+    expect((await reopened.find({ key: 'subagent-max-log-entries' }))?.props.value).toBe('240')
+    await selectTab(reopened, 'project-files')
+    expect((await reopened.find({ key: 'project-files-max-preview' }))?.props.value).toBe('120000')
+    expect((await reopened.find({ key: 'project-files-max-list' }))?.props.value).toBe('500')
+    await reopened.unmount()
+  })
 }
 
 test('normalizes statusline positions independently and defaults legacy files to the existing slot', () => {

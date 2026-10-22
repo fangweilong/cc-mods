@@ -4,7 +4,7 @@
 
 - Subagent 名称、类型、模型和状态
 - 当前任务描述、当前活动，以及最近 3 条工具 / 输出摘要
-- 多个正在运行的 Subagent；已结束的 Agent 保留最近 6 个，方便回看
+- 多个正在运行的 Subagent；已结束的 Agent 按配置保留（默认最近 6 个），方便回看
 - 每张卡片有明确的「查看转录」按钮，调用 `$.ui.view({ agentId })` 打开原生 Subagent transcript（与鼠标点击 Subagent 相同）
 - 正在查看的 Agent 会显示「返回主会话」，面板顶部也有 `↩ 主会话` 和 `清除`
 - 不再把流式文本截成难以理解的长串；完整过程以原生 transcript 为准
@@ -34,11 +34,29 @@ Subagent 启动后会自动请求打开面板，也可以手动执行：
 
 ## 配置
 
-本仓库所有可调配置统一在 **`/my-cc-mods-config` 可视化面板**管理（由独立的 `cc-mods-config` 插件提供）。本 Mod 当前自动工作，没有可调配置；`/subagent-view` 和 `clear` 是运行操作，不是独立配置入口。后续新增设置也应接入统一面板。
+本仓库所有可调配置统一在 **`/my-cc-mods-config` 可视化面板**管理（由独立的 `cc-mods-config` 插件提供）。在「Subagent」页签可调整：
+
+- 最多显示 Agent 卡片数（默认 `12`）；
+- 已结束 Agent 保留数（默认 `6`，`0` 表示结束后立即移除）；
+- 每个 Agent 日志条数（默认 `120`）。
+
+配置保存在 `~/.config/my-cc-mods/config.json` 的 `subagentSplitView` 段：
+
+```json
+{
+  "subagentSplitView": {
+    "maxVisibleAgents": 12,
+    "maxFinishedAgents": 6,
+    "maxLogEntries": 120
+  }
+}
+```
+
+面板保存后通过 `fs.write` 热重载；`/subagent-view` 和 `clear` 是运行操作，不是独立配置入口。
 
 ## 设计边界
 
-本 Mod 只观察和渲染 Subagent 事件，不创建 Agent、不修改 Agent 参数、不改变权限和工具执行结果。日志仅保存在当前 Claude Code 进程内，最多保留每个 Agent 120 条记录；已结束的 Agent 最多保留 6 个，超出后按结束时间淘汰。
+本 Mod 只观察和渲染 Subagent 事件，不创建 Agent、不修改 Agent 参数、不改变权限和工具执行结果。日志仅保存在当前 Claude Code 进程内，按配置保留每个 Agent 的最近记录与已结束 Agent；超出后按结束时间淘汰。
 
 ## 验证
 

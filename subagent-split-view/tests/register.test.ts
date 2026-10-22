@@ -1,5 +1,5 @@
-import { expect, test } from 'claude-code/testing'
-import { formatLogEntry, formatPanelHeader, isFinishedAgentStatus } from '../hooks/register'
+import { expect, mock, test } from 'claude-code/testing'
+import { formatLogEntry, formatPanelHeader, isFinishedAgentStatus, normalizeSubagentViewConfig } from '../hooks/register'
 
 const paneProps = {
   title: 'Subagents',
@@ -23,6 +23,57 @@ test('formats the panel header with tracked and running counts', () => {
 test('formats execution log entries with readable markers', () => {
   expect(formatLogEntry({ kind: 'tool', text: 'Read README.md' })).toBe('▶ Read README.md')
   expect(formatLogEntry({ kind: 'result', text: 'done' })).toBe('✓ done')
+})
+
+test('normalizes pane limits and clamps invalid values', () => {
+  expect(normalizeSubagentViewConfig({})).toEqual({
+    maxVisibleAgents: 12,
+    maxFinishedAgents: 6,
+    maxLogEntries: 120,
+  })
+  expect(normalizeSubagentViewConfig({
+    subagentSplitView: { maxVisibleAgents: 24, maxFinishedAgents: 0, maxLogEntries: 240 },
+  })).toEqual({ maxVisibleAgents: 24, maxFinishedAgents: 0, maxLogEntries: 240 })
+  expect(normalizeSubagentViewConfig({
+    subagentSplitView: { maxVisibleAgents: 0, maxFinishedAgents: -1, maxLogEntries: 9_999 },
+  })).toEqual({ maxVisibleAgents: 1, maxFinishedAgents: 0, maxLogEntries: 500 })
+  expect(normalizeSubagentViewConfig({ maxLogEntries: '240' })).toEqual({
+    maxVisibleAgents: 12,
+    maxFinishedAgents: 6,
+    maxLogEntries: 120,
+  })
+})
+
+test('drops finished agents when configured retention is zero', async ($, on) => {
+  mock.env(on, { HOME: '/test-home' })
+  on('fs.read', () => ({ value: JSON.stringify({ subagentSplitView: { maxFinishedAgents: 0 } }) }))
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('command.register', () => ({ value: { command: 'subagent-view' } }))
+  on('agent.list', () => ({ value: [] }))
+  on('agent.spawn', () => ({ model: 'Test Model', agentId: 'agent-retention' }))
+  on('turn.complete', ($, e) => ({ text: e.answer }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+
+  await $.session.start({ cwd: '/work/project', surface: 'terminal', isInteractive: true })
+  await $.agent.spawn({ prompt: 'finish the test', description: 'retention test' })
+  await $.turn.complete({
+    agentId: 'agent-retention',
+    turnId: 'agent-turn',
+    answer: 'done',
+    durationMs: 10,
+    isAborted: false,
+    reason: 'answer',
+  })
+  const ui = await $.ui.mount({
+    plugin: 'subagent-split-view',
+    surface: 'terminal',
+    component: 'Pane',
+    requestId: 'subagent-split-view',
+    props: paneProps,
+  })
+
+  expect(await ui.find({ type: 'Text', text: /Subagents · 0 running · 0 tracked/ })).toBeDefined()
+  await ui.unmount()
 })
 
 test('keeps a completed subagent available for transcript review', async ($, on) => {

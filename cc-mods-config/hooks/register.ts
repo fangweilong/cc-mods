@@ -1,6 +1,6 @@
 import { atom, read, update } from 'claude-code'
 import type { ConfigRow, EngineInterface, Register } from 'claude-code'
-import type { I18nConfigDraft, StatuslineConfig, StatuslineDisplayMode, StatuslineModule, StatuslinePosition, TimestampConfig, ToolOutputConfig, ToolOutputMode, TurnDurationConfigDraft } from '../types'
+import type { I18nConfigDraft, ProjectFilesConfig, StatuslineConfig, StatuslineDisplayMode, StatuslineModule, StatuslinePosition, SubagentViewConfig, TimestampConfig, ToolOutputConfig, ToolOutputMode, TurnDurationConfigDraft } from '../types'
 
 const UI_COLORS = { cyan: '#50c8ff', red: '#ff5a64', gray: '#8791a0' } as const
 
@@ -27,6 +27,8 @@ export type Language = 'en' | 'zh'
 export type StatusConfig = StatuslineConfig & {
   timestamp: TimestampConfig
   toolOutput: ToolOutputConfig
+  subagentSplitView: SubagentViewConfig
+  projectFiles: ProjectFilesConfig
 }
 
 export const DEFAULT_CONFIG: StatusConfig = {
@@ -71,6 +73,15 @@ export const DEFAULT_CONFIG: StatusConfig = {
     foldAfterLines: 12,
     keepErrorsExpanded: true,
   },
+  subagentSplitView: {
+    maxVisibleAgents: 12,
+    maxFinishedAgents: 6,
+    maxLogEntries: 120,
+  },
+  projectFiles: {
+    maxPreviewChars: 60_000,
+    maxListEntries: 200,
+  },
 }
 
 const configAtom = atom({ plugin: 'cc-mods-config', key: 'config' } as const, cloneConfig(DEFAULT_CONFIG))
@@ -80,9 +91,9 @@ const turnDurationDraftAtom = atom({ plugin: 'cc-mods-config', key: 'turnDuratio
 const TURN_DURATION_FIELDS = ['turnDurationMode', 'turnDurationVisible', 'turnDurationSpacing'] as const
 
 const CONFIG_PANE = 'my-cc-mods-config'
-type ConfigTab = 'statusline' | 'prompt-frame' | 'language-time' | 'tool-output' | 'subagents'
+type ConfigTab = 'statusline' | 'prompt-frame' | 'language-time' | 'tool-output' | 'project-files' | 'subagents'
 
-const CONFIG_TABS: readonly ConfigTab[] = ['statusline', 'prompt-frame', 'language-time', 'tool-output', 'subagents']
+const CONFIG_TABS: readonly ConfigTab[] = ['statusline', 'prompt-frame', 'language-time', 'tool-output', 'project-files', 'subagents']
 let activeTab: ConfigTab = 'statusline'
 let config: StatusConfig = cloneConfig(DEFAULT_CONFIG)
 let configPath = ''
@@ -98,6 +109,8 @@ function cloneConfig(value: StatusConfig): StatusConfig {
     promptFrame: { ...value.promptFrame },
     timestamp: { ...value.timestamp },
     toolOutput: { ...DEFAULT_CONFIG.toolOutput, ...value.toolOutput },
+    subagentSplitView: { ...DEFAULT_CONFIG.subagentSplitView, ...value.subagentSplitView },
+    projectFiles: { ...DEFAULT_CONFIG.projectFiles, ...value.projectFiles },
   }
 }
 
@@ -114,6 +127,8 @@ export function normalizeConfig(value: unknown): StatusConfig {
     promptFrame?: unknown
     timestamp?: unknown
     toolOutput?: unknown
+    subagentSplitView?: unknown
+    projectFiles?: unknown
   }
 
   if (data.position === 'session-mode' || data.position === 'below-prompt') {
@@ -187,6 +202,29 @@ export function normalizeConfig(value: unknown): StatusConfig {
     }
     if (typeof toolOutput.keepErrorsExpanded === 'boolean') {
       result.toolOutput.keepErrorsExpanded = toolOutput.keepErrorsExpanded
+    }
+  }
+
+  if (data.subagentSplitView && typeof data.subagentSplitView === 'object') {
+    const subagent = data.subagentSplitView as Record<string, unknown>
+    if (typeof subagent.maxVisibleAgents === 'number' && Number.isFinite(subagent.maxVisibleAgents)) {
+      result.subagentSplitView.maxVisibleAgents = Math.min(50, Math.max(1, Math.round(subagent.maxVisibleAgents)))
+    }
+    if (typeof subagent.maxFinishedAgents === 'number' && Number.isFinite(subagent.maxFinishedAgents)) {
+      result.subagentSplitView.maxFinishedAgents = Math.min(50, Math.max(0, Math.round(subagent.maxFinishedAgents)))
+    }
+    if (typeof subagent.maxLogEntries === 'number' && Number.isFinite(subagent.maxLogEntries)) {
+      result.subagentSplitView.maxLogEntries = Math.min(500, Math.max(20, Math.round(subagent.maxLogEntries)))
+    }
+  }
+
+  if (data.projectFiles && typeof data.projectFiles === 'object') {
+    const files = data.projectFiles as Record<string, unknown>
+    if (typeof files.maxPreviewChars === 'number' && Number.isFinite(files.maxPreviewChars)) {
+      result.projectFiles.maxPreviewChars = Math.min(1_000_000, Math.max(1_000, Math.round(files.maxPreviewChars)))
+    }
+    if (typeof files.maxListEntries === 'number' && Number.isFinite(files.maxListEntries)) {
+      result.projectFiles.maxListEntries = Math.min(2_000, Math.max(10, Math.round(files.maxListEntries)))
     }
   }
 
@@ -369,6 +407,7 @@ function configTabLabel(tab: ConfigTab, language: Language): string {
     'prompt-frame': { en: 'Prompt frame', zh: '输入框' },
     'language-time': { en: 'Language & time', zh: '语言与时间' },
     'tool-output': { en: 'Tool output', zh: '工具输出' },
+    'project-files': { en: 'File browser', zh: '文件浏览' },
     subagents: { en: 'Subagents', zh: 'Subagent' },
   }
   return labels[tab][language]
@@ -387,6 +426,10 @@ async function renderConfigPane($: EngineInterface, e: any): Promise<any> {
   const moveUp = language === 'zh' ? '上移' : '↑'
   const moveDown = language === 'zh' ? '下移' : '↓'
   const close = language === 'zh' ? '关闭' : 'Close'
+  const numericOptions = (values: number[], currentValue: number) => [
+    ...values.map(item => ({ value: String(item), label: String(item) })),
+    ...(values.includes(currentValue) ? [] : [{ value: String(currentValue), label: String(currentValue) }]),
+  ]
   const save = language === 'zh' ? '保存配置' : 'Save configuration'
   const i18nDraft = await read($, i18nDraftAtom)
   const durationDraft = await read($, turnDurationDraftAtom)
@@ -698,6 +741,42 @@ async function renderConfigPane($: EngineInterface, e: any): Promise<any> {
     ],
   })
 
+  const projectFilesSection = Box({
+    key: 'project-files-config-section',
+    flexDirection: 'column',
+    flexShrink: 0,
+    marginTop: 1,
+    children: [
+      Text({ key: 'project-files-config-heading', color: UI_COLORS.cyan, weight: 'bold', children: [language === 'zh' ? 'project-files · 文件浏览' : 'project-files · File browser'] }),
+      Text({ color: UI_COLORS.gray, children: [language === 'zh'
+        ? '仅在当前会话目录内浏览和预览；上限过大时，读取与渲染会更慢。'
+        : 'Browse and preview only within the session directory; larger limits are slower to read and render.'] }),
+      Select({
+        key: 'project-files-max-preview',
+        label: language === 'zh' ? '预览上限（字符）' : 'Preview limit (characters)',
+        value: String(current.projectFiles.maxPreviewChars),
+        options: numericOptions([20_000, 60_000, 120_000], current.projectFiles.maxPreviewChars),
+        onSelect: (value: string) => changeConfig($, latest => ({
+          ...latest,
+          projectFiles: { ...latest.projectFiles, maxPreviewChars: Number(value) },
+        })),
+      }),
+      Select({
+        key: 'project-files-max-list',
+        label: language === 'zh' ? '目录列表上限（项）' : 'Directory listing limit (entries)',
+        value: String(current.projectFiles.maxListEntries),
+        options: numericOptions([100, 200, 500], current.projectFiles.maxListEntries),
+        onSelect: (value: string) => changeConfig($, latest => ({
+          ...latest,
+          projectFiles: { ...latest.projectFiles, maxListEntries: Number(value) },
+        })),
+      }),
+      Text({ dimColor: true, children: [language === 'zh'
+        ? '超长预览会截断并提示；列表只显示排序后的前 N 项。'
+        : 'Long previews are truncated with a notice; listings show the first N entries after sorting.'] }),
+    ],
+  })
+
   const subagentSection = Box({
     key: 'subagent-config-section',
     flexDirection: 'column',
@@ -705,12 +784,44 @@ async function renderConfigPane($: EngineInterface, e: any): Promise<any> {
     marginTop: 1,
     children: [
       Text({ key: 'subagent-config-heading', color: UI_COLORS.cyan, weight: 'bold', children: [language === 'zh' ? 'subagent-split-view · Subagent 面板' : 'subagent-split-view · Subagent pane'] }),
-      Text({ dimColor: true, children: [language === 'zh' ? 'Subagent 面板自动显示，当前没有可调配置。' : 'The Subagent pane opens automatically and currently has no configurable options.'] }),
-      Text({ dimColor: true, children: [language === 'zh' ? '可在 Subagent 面板中点击名称查看明细，再点击 ↩ main 返回主会话。' : 'Click a subagent name in its pane to inspect it, then use ↩ main to return.'] }),
+      Text({ color: UI_COLORS.gray, children: [language === 'zh'
+        ? '面板自动显示；以下限制只作用于当前进程内的卡片与日志。'
+        : 'The pane opens automatically; these limits apply only to cards and logs kept in this process.'] }),
+      Select({
+        key: 'subagent-max-visible',
+        label: language === 'zh' ? '最多显示 Agent 卡片' : 'Max visible agent cards',
+        value: String(current.subagentSplitView.maxVisibleAgents),
+        options: numericOptions([6, 12, 24, 48], current.subagentSplitView.maxVisibleAgents),
+        onSelect: (value: string) => changeConfig($, latest => ({
+          ...latest,
+          subagentSplitView: { ...latest.subagentSplitView, maxVisibleAgents: Number(value) },
+        })),
+      }),
+      Select({
+        key: 'subagent-max-finished',
+        label: language === 'zh' ? '已结束 Agent 保留数' : 'Finished agents retained',
+        value: String(current.subagentSplitView.maxFinishedAgents),
+        options: numericOptions([0, 3, 6, 12], current.subagentSplitView.maxFinishedAgents),
+        onSelect: (value: string) => changeConfig($, latest => ({
+          ...latest,
+          subagentSplitView: { ...latest.subagentSplitView, maxFinishedAgents: Number(value) },
+        })),
+      }),
+      Select({
+        key: 'subagent-max-log-entries',
+        label: language === 'zh' ? '每个 Agent 日志条数' : 'Log entries per agent',
+        value: String(current.subagentSplitView.maxLogEntries),
+        options: numericOptions([60, 120, 240, 480], current.subagentSplitView.maxLogEntries),
+        onSelect: (value: string) => changeConfig($, latest => ({
+          ...latest,
+          subagentSplitView: { ...latest.subagentSplitView, maxLogEntries: Number(value) },
+        })),
+      }),
+      Text({ dimColor: true, children: [language === 'zh' ? '可在 Subagent 面板中点击「查看转录」打开原生明细，再点击「返回主会话」。' : 'Use "View transcript" in the pane to open the native details, then "Back to main".'] }),
     ],
   })
 
-  const tabContent = { statusline: statuslineSection, 'prompt-frame': promptFrameSection, 'language-time': languageTimeSection, 'tool-output': toolOutputSection, subagents: subagentSection }[activeTab]
+  const tabContent = { statusline: statuslineSection, 'prompt-frame': promptFrameSection, 'language-time': languageTimeSection, 'tool-output': toolOutputSection, 'project-files': projectFilesSection, subagents: subagentSection }[activeTab]
   const tabButtons = CONFIG_TABS.map(tab => Button({
     key: `config-tab-${tab}`,
     label: configTabLabel(tab, language),
