@@ -1,12 +1,14 @@
-import type { CommandTranslation, ConfigTranslation, HintKey, LanguagePack } from '../types'
+import type { CommandTranslation, ConfigTranslation, HintKey, LanguagePack, SpinnerPhase } from '../types'
 import { ORIGINAL_PACK } from './original'
 
 export const DEFAULT_SOURCE = 'zh-CN'
 const LANGUAGE_ID = /^[a-z]{2,8}(?:-[a-z0-9]{1,8})*$/i
 const HINT_KEYS: readonly HintKey[] = [
   'shortcuts', 'interrupt', 'background', 'expand', 'collapse', 'history', 'cycleMode', 'acceptSuggestion',
+  'newline', 'commands', 'filePaths', 'sideQuestion', 'subagents', 'interruptAndSend', 'queue', 'undoDelete', 'pasteDeleted',
 ]
-const PACK_KEYS = ['id', 'name', 'running', 'completed', 'duration', 'turnDuration', 'hints', 'modes', 'notices', 'messages', 'tools', 'config', 'commands', 'command']
+const SPINNER_PHASES: readonly SpinnerPhase[] = ['thinking', 'requesting', 'tool-use', 'responding']
+const PACK_KEYS = ['id', 'name', 'running', 'completed', 'duration', 'turnDuration', 'hints', 'phases', 'modes', 'notices', 'messages', 'tools', 'config', 'commands', 'command']
 // 命令名沿用宿主的写法：字母数字、下划线、连字符，可带命名空间分隔符。
 const COMMAND_NAME = /^[A-Za-z0-9_:.-]+$/
 
@@ -92,7 +94,7 @@ export function parseLanguagePack(content: string, expectedId?: string): Languag
   }
   if (data.turnDuration !== undefined) {
     const templates = object(data.turnDuration, 'turnDuration')
-    if (Object.keys(templates).some(key => key !== 'elapsed')) throw new Error('turnDuration: unknown template key')
+    if (Object.keys(templates).some(key => key !== 'elapsed' && key !== 'waiting')) throw new Error('turnDuration: unknown template key')
     pack.turnDuration = {}
     if (templates.elapsed !== undefined) {
       const elapsed = text(templates.elapsed, 'turnDuration.elapsed')
@@ -101,8 +103,16 @@ export function parseLanguagePack(content: string, expectedId?: string): Languag
       if (/[{}]/u.test(elapsed.replace(/\{duration\}/gu, ''))) throw new Error('turnDuration.elapsed: only {duration} is allowed')
       pack.turnDuration.elapsed = elapsed
     }
+    if (templates.waiting !== undefined) {
+      const waiting = text(templates.waiting, 'turnDuration.waiting')
+      // 等待行只在能完整表达后台 Agent 数时自绘；没有 {agents} 就没有可显示的数字。
+      if (!waiting.includes('{agents}')) throw new Error('turnDuration.waiting: must include {agents}')
+      if (/[{}]/u.test(waiting.replace(/\{agents\}/gu, ''))) throw new Error('turnDuration.waiting: only {agents} is allowed')
+      pack.turnDuration.waiting = waiting
+    }
   }
   if (data.hints !== undefined) pack.hints = dictionary(data.hints, 'hints', HINT_KEYS)
+  if (data.phases !== undefined) pack.phases = dictionary(data.phases, 'phases', SPINNER_PHASES) as Partial<Record<SpinnerPhase, string>>
   for (const key of ['modes', 'notices', 'messages', 'tools'] as const) {
     if (data[key] !== undefined) pack[key] = dictionary(data[key], key)
   }

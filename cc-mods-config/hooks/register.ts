@@ -1,6 +1,6 @@
 import { atom, read, update } from 'claude-code'
 import type { ConfigRow, EngineInterface, Register } from 'claude-code'
-import type { I18nConfigDraft, StatuslineConfig, StatuslineDisplayMode, StatuslineModule, StatuslinePosition, TimestampConfig, TurnDurationConfigDraft } from '../types'
+import type { ImageConfig, ImageMode, I18nConfigDraft, StatuslineConfig, StatuslineDisplayMode, StatuslineModule, StatuslinePosition, TimestampConfig, TurnDurationConfigDraft } from '../types'
 
 const UI_COLORS = { cyan: '#50c8ff', red: '#ff5a64', gray: '#8791a0' } as const
 
@@ -26,9 +26,11 @@ export type Language = 'en' | 'zh'
 
 export type StatusConfig = StatuslineConfig & {
   timestamp: TimestampConfig
+  image: ImageConfig
 }
 
 export const DEFAULT_CONFIG: StatusConfig = {
+  enabled: true,
   position: 'session-mode',
   displayMode: 'compact',
   language: 'en',
@@ -65,6 +67,15 @@ export const DEFAULT_CONFIG: StatusConfig = {
     tps: true,
     autoExpandToolGroups: false,
   },
+  image: {
+    enabled: true,
+    mode: 'auto',
+    maxColumns: 48,
+    maxRows: 16,
+    showUserImages: true,
+    showAssistantImages: true,
+    showToolImages: true,
+  },
 }
 
 const configAtom = atom({ plugin: 'cc-mods-config', key: 'config' } as const, cloneConfig(DEFAULT_CONFIG))
@@ -74,9 +85,9 @@ const turnDurationDraftAtom = atom({ plugin: 'cc-mods-config', key: 'turnDuratio
 const TURN_DURATION_FIELDS = ['turnDurationMode', 'turnDurationVisible', 'turnDurationSpacing'] as const
 
 const CONFIG_PANE = 'my-cc-mods-config'
-type ConfigTab = 'statusline' | 'prompt-frame' | 'language-time' | 'subagents'
+type ConfigTab = 'statusline' | 'prompt-frame' | 'terminal-image' | 'language-time' | 'subagents'
 
-const CONFIG_TABS: readonly ConfigTab[] = ['statusline', 'prompt-frame', 'language-time', 'subagents']
+const CONFIG_TABS: readonly ConfigTab[] = ['statusline', 'prompt-frame', 'terminal-image', 'language-time', 'subagents']
 let activeTab: ConfigTab = 'statusline'
 let config: StatusConfig = cloneConfig(DEFAULT_CONFIG)
 let configPath = ''
@@ -84,6 +95,7 @@ let draftConfig: StatusConfig | undefined
 
 function cloneConfig(value: StatusConfig): StatusConfig {
   return {
+    enabled: value.enabled,
     position: value.position,
     displayMode: value.displayMode,
     language: value.language,
@@ -91,6 +103,7 @@ function cloneConfig(value: StatusConfig): StatusConfig {
     modules: { ...value.modules },
     promptFrame: { ...value.promptFrame },
     timestamp: { ...value.timestamp },
+    image: { ...value.image },
   }
 }
 
@@ -99,6 +112,7 @@ export function normalizeConfig(value: unknown): StatusConfig {
   if (!value || typeof value !== 'object') return result
 
   const data = value as {
+    enabled?: unknown
     position?: unknown
     displayMode?: unknown
     language?: unknown
@@ -106,6 +120,11 @@ export function normalizeConfig(value: unknown): StatusConfig {
     modules?: unknown
     promptFrame?: unknown
     timestamp?: unknown
+    image?: unknown
+  }
+
+  if (typeof data.enabled === 'boolean') {
+    result.enabled = data.enabled
   }
 
   if (data.position === 'session-mode' || data.position === 'below-prompt') {
@@ -167,6 +186,23 @@ export function normalizeConfig(value: unknown): StatusConfig {
     if (typeof timestamp.format === 'string' && timestamp.format.length > 0) result.timestamp.format = timestamp.format
     if (typeof timestamp.tps === 'boolean') result.timestamp.tps = timestamp.tps
     if (typeof timestamp.autoExpandToolGroups === 'boolean') result.timestamp.autoExpandToolGroups = timestamp.autoExpandToolGroups
+  }
+
+  if (data.image && typeof data.image === 'object') {
+    const image = data.image as Record<string, unknown>
+    if (typeof image.enabled === 'boolean') result.image.enabled = image.enabled
+    if (image.mode === 'auto' || image.mode === 'on' || image.mode === 'off') {
+      result.image.mode = image.mode
+    }
+    if (typeof image.maxColumns === 'number' && Number.isInteger(image.maxColumns)) {
+      result.image.maxColumns = Math.min(255, Math.max(1, image.maxColumns))
+    }
+    if (typeof image.maxRows === 'number' && Number.isInteger(image.maxRows)) {
+      result.image.maxRows = Math.min(255, Math.max(1, image.maxRows))
+    }
+    if (typeof image.showUserImages === 'boolean') result.image.showUserImages = image.showUserImages
+    if (typeof image.showAssistantImages === 'boolean') result.image.showAssistantImages = image.showAssistantImages
+    if (typeof image.showToolImages === 'boolean') result.image.showToolImages = image.showToolImages
   }
 
   return result
@@ -346,12 +382,17 @@ function configTabLabel(tab: ConfigTab, language: Language): string {
   const labels: Record<ConfigTab, { en: string; zh: string }> = {
     statusline: { en: 'Statusline', zh: '状态栏' },
     'prompt-frame': { en: 'Prompt frame', zh: '输入框' },
+    'terminal-image': { en: 'Images', zh: '图片' },
     'language-time': { en: 'Language & time', zh: '语言与时间' },
     subagents: { en: 'Subagents', zh: 'Subagent' },
   }
   return labels[tab][language]
 }
 
+function parseDimension(value: string, fallback: number): number {
+  const parsed = Number(value.trim())
+  return Number.isInteger(parsed) && parsed >= 1 && parsed <= 255 ? parsed : fallback
+}
 
 async function renderConfigPane($: EngineInterface, e: any): Promise<any> {
   const stateConfig = await read($, configAtom)
@@ -527,6 +568,15 @@ async function renderConfigPane($: EngineInterface, e: any): Promise<any> {
         options: [{ value: 'en', label: 'English' }, { value: 'zh', label: '简体中文' }],
         onSelect: (value: Language) => changeConfig($, latest => ({ ...latest, language: value })),
       }),
+      Box({ children: [
+        Text({ color: UI_COLORS.gray, children: [language === 'zh' ? '状态栏总开关：' : 'Statusline: '] }),
+        Button({
+          key: 'statusline-enabled-toggle',
+          label: current.enabled ? enabled : disabled,
+          onPress: () => changeConfig($, latest => ({ ...latest, enabled: !latest.enabled })),
+        }),
+      ] }),
+      Text({ dimColor: true, children: [language === 'zh' ? '停用后不绘制状态栏，并把模式提示区域与输入框提示交还原生 UI。' : 'When off, no statusline is drawn and the mode and prompt-hint areas are left to the native UI.'] }),
       Select({
         key: 'statusline-position',
         label: language === 'zh' ? '状态栏位置' : 'Statusline position',
@@ -632,7 +682,80 @@ async function renderConfigPane($: EngineInterface, e: any): Promise<any> {
     ],
   })
 
-  const tabContent = { statusline: statuslineSection, 'prompt-frame': promptFrameSection, 'language-time': languageTimeSection, subagents: subagentSection }[activeTab]
+  const imageSourceRows = [
+    ['user', language === 'zh' ? '用户粘贴图片' : 'Pasted images'],
+    ['assistant', language === 'zh' ? '助手回复图片' : 'Assistant images'],
+    ['tool', language === 'zh' ? '工具结果图片' : 'Tool result images'],
+  ] as const
+  const imageSourceFields = {
+    user: 'showUserImages',
+    assistant: 'showAssistantImages',
+    tool: 'showToolImages',
+  } as const
+  const imageSection = Box({
+    key: 'terminal-image-config-section',
+    flexDirection: 'column',
+    flexShrink: 0,
+    marginTop: 1,
+    children: [
+      Text({ key: 'terminal-image-config-heading', color: UI_COLORS.cyan, weight: 'bold', children: [language === 'zh' ? 'terminal-image · 终端图片' : 'terminal-image · Terminal images'] }),
+      Text({ color: UI_COLORS.gray, children: [language === 'zh' ? '在支持图片协议的终端渲染 PNG；不支持时不占位。' : 'Render PNGs where the terminal supports images; nothing is drawn otherwise.'] }),
+      Box({ children: [
+        Text({ color: UI_COLORS.gray, children: [language === 'zh' ? '插件状态：' : 'Plugin: '] }),
+        Button({
+          key: 'terminal-image-enabled-toggle',
+          label: current.image.enabled ? enabled : disabled,
+          onPress: () => changeConfig($, latest => ({ ...latest, image: { ...latest.image, enabled: !latest.image.enabled } })),
+        }),
+      ] }),
+      Select({
+        key: 'terminal-image-mode',
+        label: language === 'zh' ? '终端能力' : 'Terminal capability',
+        value: current.image.mode,
+        options: [
+          { value: 'auto', label: language === 'zh' ? '自动探测' : 'Auto-detect' },
+          { value: 'on', label: language === 'zh' ? '总是尝试显示' : 'Always attempt' },
+          { value: 'off', label: language === 'zh' ? '总是不显示' : 'Never show' },
+        ],
+        onSelect: (value: ImageMode) => changeConfig($, latest => ({ ...latest, image: { ...latest.image, mode: value } })),
+      }),
+      Input({
+        key: 'terminal-image-max-columns',
+        label: language === 'zh' ? '最大列数（1-255）' : 'Max columns (1-255)',
+        value: String(current.image.maxColumns),
+        submitLabel: '',
+        onInput: (value: string) => changeConfig($, latest => ({ ...latest, image: { ...latest.image, maxColumns: parseDimension(value, latest.image.maxColumns) } })),
+        onSubmit: () => undefined,
+      }),
+      Input({
+        key: 'terminal-image-max-rows',
+        label: language === 'zh' ? '最大行数（1-255）' : 'Max rows (1-255)',
+        value: String(current.image.maxRows),
+        submitLabel: '',
+        onInput: (value: string) => changeConfig($, latest => ({ ...latest, image: { ...latest.image, maxRows: parseDimension(value, latest.image.maxRows) } })),
+        onSubmit: () => undefined,
+      }),
+      Text({ color: UI_COLORS.gray, children: [language === 'zh' ? '显示来源：' : 'Show from:'] }),
+      ...imageSourceRows.map(([key, label]) => Box({
+        children: [
+          Text({ color: UI_COLORS.gray, children: [`${label}：`] }),
+          Button({
+            key: `terminal-image-${key}-toggle`,
+            label: current.image[imageSourceFields[key]] ? enabled : disabled,
+            onPress: () => changeConfig($, latest => {
+              const image = { ...latest.image }
+              const field = imageSourceFields[key]
+              image[field] = !image[field]
+              return { ...latest, image }
+            }),
+          }),
+        ],
+      })),
+      Text({ dimColor: true, children: [language === 'zh' ? '只支持 PNG 本地文件；CC_TERMINAL_IMAGE 环境变量优先于“终端能力”。' : 'PNG local files only; the CC_TERMINAL_IMAGE environment variable overrides Terminal capability.'] }),
+    ],
+  })
+
+  const tabContent = { statusline: statuslineSection, 'prompt-frame': promptFrameSection, 'terminal-image': imageSection, 'language-time': languageTimeSection, subagents: subagentSection }[activeTab]
   const tabButtons = CONFIG_TABS.map(tab => Button({
     key: `config-tab-${tab}`,
     label: configTabLabel(tab, language),

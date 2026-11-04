@@ -282,6 +282,15 @@ test('normalizes display modes and defaults legacy or invalid settings to compac
   }
 })
 
+test('normalizes the plugin switch and keeps legacy files enabled', () => {
+  expect(DEFAULT_CONFIG.enabled).toBe(true)
+  expect(normalizeConfig({ enabled: false }).enabled).toBe(false)
+  expect(normalizeConfig({ enabled: true }).enabled).toBe(true)
+  for (const value of [undefined, null, {}, { enabled: 'false' }, { enabled: 0 }, { enabled: null }]) {
+    expect(normalizeConfig(value).enabled).toBe(true)
+  }
+})
+
 test('formats subagent lines with status, context, tokens, and task text', () => {
   const line = formatSubagentLine({
     id: 'active',
@@ -490,8 +499,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
   }
 
   for (const position of ['session-mode', 'below-prompt'] as const) {
-    test(`renders status only in the configured ${position} slot on ${surface}`, async ($, on) => {
-      const world = mockStatusSession(on)
+    test(`renders status only in the configured ${position} slot on ${surface}`, async ($, on) => {      const world = mockStatusSession(on)
       world.file = JSON.stringify({ ...DEFAULT_CONFIG, position })
       await $.session.start({ cwd: 'D:/project', surface, isInteractive: true })
       const mode = await $.ui.mount({ plugin: 'statusline-mod', surface, component: 'SessionMode', props: { modes: ['accept edits on'] } })
@@ -509,6 +517,38 @@ for (const surface of ['terminal', 'desktop'] as const) {
       await hint.unmount()
     })
   }
+
+  test(`leaves both native slots untouched while disabled on ${surface}`, async ($, on) => {
+    const world = mockStatusSession(on)
+    world.file = JSON.stringify({ ...DEFAULT_CONFIG, enabled: false })
+    await $.session.start({ cwd: 'D:/project', surface, isInteractive: true })
+    const mode = await $.ui.mount({ plugin: 'statusline-mod', surface, component: 'SessionMode', props: { modes: ['accept edits on'] } })
+    const hint = await $.ui.mount({ plugin: 'statusline-mod', surface, component: 'PromptHint', props: { hint: '? for shortcuts', isDraft: false, isWorking: false } })
+    expect(await mode.find({ type: 'Text', text: /Test Model/ })).toBeUndefined()
+    expect(await mode.find({ type: 'Text', text: 'accept edits on' })).toBeDefined()
+    expect(await hint.find({ type: 'Text', text: /Test Model/ })).toBeUndefined()
+    expect(await hint.find({ key: 'native-hint-row' })).toBeDefined()
+    await mode.unmount()
+    await hint.unmount()
+  })
+
+  test(`restores rendering after re-enabling on ${surface}`, async ($, on) => {
+    const world = mockStatusSession(on)
+    on('turn.start', ($, e) => ({ turnId: e.turnId }))
+    on('turn.complete', ($, e) => ({ text: e.answer }))
+    world.file = JSON.stringify({ ...DEFAULT_CONFIG, enabled: false })
+    await $.session.start({ cwd: 'D:/project', surface, isInteractive: true })
+    const ui = await $.ui.mount({ plugin: 'statusline-mod', surface, component: 'SessionMode', props: { modes: [] } })
+    expect(await ui.find({ type: 'Text', text: /Test Model/ })).toBeUndefined()
+    world.file = JSON.stringify({ ...DEFAULT_CONFIG, enabled: true })
+    await $.turn.complete({
+      turnId: 're-enable', answer: '', durationMs: 100, isAborted: false, reason: 'answer',
+      usage: { model: 'Test Model', input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+    })
+    await ui.redraw()
+    expect(await ui.find({ type: 'Text', text: /Test Model/ })).toBeDefined()
+    await ui.unmount()
+  })
 
   test(`moves status between mounted slots after config saves on ${surface}`, { plugins: [configWriter] }, async ($, on) => {
     const world = mockStatusSession(on)

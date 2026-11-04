@@ -1,7 +1,8 @@
 import type { CommandTranslation, ConfigTranslation, HintKey, LanguagePack } from '../types'
 
 // 只匹配完整快捷键提示片段，避免改动文件名、命令、内容中的同名词。
-const HINT_RULES: readonly { pattern: RegExp; key: HintKey }[] = [
+// bindings 是少量已核对的非按键提示前缀（如 `/`、`@`），不放开通用按键匹配。
+const HINT_RULES: readonly { pattern: RegExp; key: HintKey; bindings?: readonly string[] }[] = [
   { pattern: /^(.*?) for shortcuts$/i, key: 'shortcuts' },
   { pattern: /^(.*?) to interrupt$/i, key: 'interrupt' },
   { pattern: /^(.*?) to run in background$/i, key: 'background' },
@@ -10,8 +11,17 @@ const HINT_RULES: readonly { pattern: RegExp; key: HintKey }[] = [
   { pattern: /^(.*?) for history$/i, key: 'history' },
   { pattern: /^(.*?) to cycle(?: modes?)?$/i, key: 'cycleMode' },
   { pattern: /^(.*?) to accept suggestion$/i, key: 'acceptSuggestion' },
+  { pattern: /^(.*?) for newlines?$/i, key: 'newline' },
+  { pattern: /^(.*?) for commands$/i, key: 'commands', bindings: ['/'] },
+  { pattern: /^(.*?) for file paths$/i, key: 'filePaths', bindings: ['@'] },
+  { pattern: /^(.*?) for side question$/i, key: 'sideQuestion', bindings: ['/btw'] },
+  { pattern: /^(.*?) to see subagents$/i, key: 'subagents', bindings: ['/tasks'] },
+  { pattern: /^(.*?) to interrupt and send$/i, key: 'interruptAndSend' },
+  { pattern: /^(.*?) to queue$/i, key: 'queue' },
+  { pattern: /^(.*?) to undo delete$/i, key: 'undoDelete' },
+  { pattern: /^(.*?) to paste deleted text$/i, key: 'pasteDeleted' },
 ]
-const KEY_BINDING = /^(?:\?|(?:ctrl|alt|shift|cmd|meta)\+[a-z0-9+]+|esc|escape|tab|enter|↑|↓|↑\/↓|up|down)$/i
+const KEY_BINDING = /^(?:\?|(?:ctrl|alt|shift|cmd|meta|option)\+[a-z0-9+]+(?: then (?:enter|tab|space|esc))?|esc|escape|tab|enter|↑|↓|↑\/↓|up|down)$/i
 const HINT_SEPARATOR = /(\s*[·•|]\s*|\s{2,})/u
 // 已核对原生实现：这些确切文案是淡色 Text，不是任务按钮或链接。
 const PASSIVE_PROMPT_HINTS = new Set(['install gh for PR status', 'gh auth login for PR status', '← for agents'])
@@ -23,7 +33,7 @@ function matchHint(text: string) {
   if ((open === '(') !== (close === ')')) return undefined
   for (const rule of HINT_RULES) {
     const key = rule.pattern.exec(body)?.[1]
-    if (key && KEY_BINDING.test(key)) {
+    if (key && (rule.bindings?.includes(key) || KEY_BINDING.test(key))) {
       return { key: rule.key, prefix: `${leading}${open}${key} `, suffix: `${close}${trailing}` }
     }
   }

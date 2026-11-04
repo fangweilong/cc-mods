@@ -79,7 +79,7 @@ function mountConfig($: Engine, surface: 'terminal' | 'desktop' = 'terminal') {
     props: { title: 'CC Mods Config', isFocused: true, bodyColumns: 120, placement: 'inline', scroll: { offset: 0, bodyRows: 80 }, view: {} },
   })
 }
-async function selectTab(ui: Awaited<ReturnType<typeof mountConfig>>, tab: 'statusline' | 'prompt-frame' | 'language-time' | 'subagents'): Promise<void> {
+async function selectTab(ui: Awaited<ReturnType<typeof mountConfig>>, tab: 'statusline' | 'prompt-frame' | 'terminal-image' | 'language-time' | 'subagents'): Promise<void> {
   await ui.press({ key: `config-tab-${tab}` })
 }
 
@@ -111,6 +111,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
       const tabs = [
         ['statusline', 'statusline-config-section', language === 'zh' ? 'statusline-mod · 状态栏' : 'statusline-mod · Statusline'],
         ['prompt-frame', 'prompt-frame-config-section', language === 'zh' ? 'user-prompt-frame · 用户输入框' : 'user-prompt-frame · User prompt frame'],
+        ['terminal-image', 'terminal-image-config-section', language === 'zh' ? 'terminal-image · 终端图片' : 'terminal-image · Terminal images'],
         ['language-time', 'language-time-config-section', language === 'zh' ? 'i18n-mod · 原生界面语言' : 'i18n-mod · Native UI language'],
         ['subagents', 'subagent-config-section', language === 'zh' ? 'subagent-split-view · Subagent 面板' : 'subagent-split-view · Subagent pane'],
       ] as const
@@ -127,6 +128,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
       expect((await ui.find({ key: 'config-tabs' }))?.props.flexDirection).toBe('row')
       expect((await ui.find({ key: 'config-actions' }))?.props.marginTop).toBe(1)
       expect((await ui.find({ key: 'panel-language' }))?.type).toBe('Select')
+      expect((await ui.find({ key: 'statusline-enabled-toggle' }))?.text).toBe(language === 'zh' ? '启用' : 'ON')
       const position = await ui.find({ key: 'statusline-position' })
       expect(position?.type).toBe('Select')
       expect(position?.props.value).toBe('session-mode')
@@ -140,6 +142,14 @@ for (const surface of ['terminal', 'desktop'] as const) {
       expect(await ui.find({ key: 'module-tool_count-toggle' })).toBeDefined()
       await selectTab(ui, 'prompt-frame')
       expect(await ui.find({ key: 'prompt-frame-title' })).toBeDefined()
+      await selectTab(ui, 'terminal-image')
+      expect((await ui.find({ key: 'terminal-image-enabled-toggle' }))?.text).toBe(language === 'zh' ? '启用' : 'ON')
+      expect((await ui.find({ key: 'terminal-image-mode' }))?.props.value).toBe('auto')
+      expect((await ui.find({ key: 'terminal-image-max-columns' }))?.props.value).toBe('48')
+      expect((await ui.find({ key: 'terminal-image-max-rows' }))?.props.value).toBe('16')
+      expect(await ui.find({ key: 'terminal-image-user-toggle' })).toBeDefined()
+      expect(await ui.find({ key: 'terminal-image-assistant-toggle' })).toBeDefined()
+      expect(await ui.find({ key: 'terminal-image-tool-toggle' })).toBeDefined()
       await selectTab(ui, 'language-time')
       expect(await ui.find({ key: 'timestamp-enabled-toggle' })).toBeDefined()
       expect((await ui.find({ key: 'timestamp-format' }))?.props.value).toBe('HH:mm:ss')
@@ -151,8 +161,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
   }
 }
 
-test('normalizes timestamp settings and defaults legacy files', () => {
-  expect(DEFAULT_CONFIG.timestamp).toEqual({ enabled: true, format: 'HH:mm:ss', tps: true, autoExpandToolGroups: false })
+test('normalizes timestamp settings and defaults legacy files', () => {  expect(DEFAULT_CONFIG.timestamp).toEqual({ enabled: true, format: 'HH:mm:ss', tps: true, autoExpandToolGroups: false })
   expect(normalizeConfig({ timestamp: { enabled: false, format: 'YYYY-MM-DD HH:mm' } }).timestamp).toEqual({
     enabled: false,
     format: 'YYYY-MM-DD HH:mm',
@@ -164,6 +173,62 @@ test('normalizes timestamp settings and defaults legacy files', () => {
   expect(normalizeConfig({}).timestamp).toEqual(DEFAULT_CONFIG.timestamp)
 })
 
+
+test('normalizes image settings and defaults legacy files', () => {
+  expect(DEFAULT_CONFIG.image).toEqual({
+    enabled: true,
+    mode: 'auto',
+    maxColumns: 48,
+    maxRows: 16,
+    showUserImages: true,
+    showAssistantImages: true,
+    showToolImages: true,
+  })
+  expect(normalizeConfig({}).image).toEqual(DEFAULT_CONFIG.image)
+  expect(normalizeConfig({ image: null }).image).toEqual(DEFAULT_CONFIG.image)
+  expect(normalizeConfig({
+    image: {
+      enabled: false,
+      mode: 'off',
+      maxColumns: 80,
+      maxRows: 24,
+      showUserImages: false,
+      showToolImages: false,
+    },
+  }).image).toEqual({
+    enabled: false,
+    mode: 'off',
+    maxColumns: 80,
+    maxRows: 24,
+    showUserImages: false,
+    showAssistantImages: true,
+    showToolImages: false,
+  })
+  expect(normalizeConfig({
+    image: { enabled: 'false', mode: 'sometimes', maxColumns: 0, maxRows: 999 },
+  }).image).toEqual({ ...DEFAULT_CONFIG.image, maxColumns: 1, maxRows: 255 })
+  expect(normalizeConfig({ image: { maxColumns: 3.5, maxRows: '16' } }).image)
+    .toEqual(DEFAULT_CONFIG.image)
+  expect(normalizeConfig({ image: { maxColumns: 1, maxRows: 255 } }).image)
+    .toMatchObject({ maxColumns: 1, maxRows: 255 })
+})
+
+test('saves terminal-image settings into the unified config file', async ($, on) => {
+  const world = mockConfig(on)
+  await openConfig($)
+  const ui = await mountConfig($)
+  await selectTab(ui, 'terminal-image')
+  await ui.press({ key: 'terminal-image-enabled-toggle' })
+  await ui.press({ key: 'terminal-image-tool-toggle' })
+  await ui.press({ key: 'save-config' })
+  await ui.unmount()
+
+  const saved = JSON.parse(world.file) as { image: Record<string, unknown> }
+  expect(saved.image.enabled).toBe(false)
+  expect(saved.image.showToolImages).toBe(false)
+  expect(saved.image.maxColumns).toBe(48)
+  expect(world.changes).toEqual([])
+})
 
 test('normalizes tool group expansion as an independent boolean and preserves native folding by default', () => {
   for (const autoExpandToolGroups of [true, false]) {
@@ -203,7 +268,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
       expect(JSON.parse(world.file).timestamp.autoExpandToolGroups).toBeUndefined()
       await ui.press({ key: 'save-config' })
       expect(JSON.parse(world.writes[0]!).timestamp).toEqual({ enabled: false, format: 'HH:mm', tps: false, autoExpandToolGroups: true })
-      expect(world.paths).toEqual(['/test-home/.config/my-cc-mods/config.json'])
+      expect(world.paths.map(path => path.replace(/\\/gu, '/').replace(/^[A-Za-z]:/u, ''))).toEqual(['/test-home/.config/my-cc-mods/config.json'])
       await ui.unmount()
       await openConfig($)
       const reopened = await mountConfig($, surface)
@@ -229,6 +294,15 @@ test('normalizes statusline positions independently and defaults legacy files to
   }
   for (const value of [undefined, null, {}, { position: 'unknown' }, { position: 1 }, { position: null }]) {
     expect(normalizeConfig(value).position).toBe('session-mode')
+  }
+})
+
+test('normalizes the statusline plugin switch independently and defaults legacy files to enabled', () => {
+  expect(DEFAULT_CONFIG.enabled).toBe(true)
+  expect(normalizeConfig({ enabled: false }).enabled).toBe(false)
+  expect(normalizeConfig({ enabled: true }).enabled).toBe(true)
+  for (const value of [undefined, null, {}, { enabled: 'false' }, { enabled: 0 }, { enabled: null }]) {
+    expect(normalizeConfig(value).enabled).toBe(true)
   }
 })
 
@@ -258,6 +332,27 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await reopened.press({ key: 'save-config' })
     expect(JSON.parse(world.writes[1]!).position).toBe('session-mode')
     expect(world.changes).toEqual([])
+    await reopened.unmount()
+  })
+}
+
+for (const surface of ['terminal', 'desktop'] as const) {
+  test(`toggles the whole statusline plugin and persists it on ${surface}`, async ($, on) => {
+    const world = mockConfig(on)
+    await openConfig($)
+    const ui = await mountConfig($, surface)
+    const toggle = 'statusline-enabled-toggle'
+    expect((await ui.find({ key: toggle }))?.text).toBe('ON')
+    await ui.press({ key: toggle })
+    expect((await ui.find({ key: toggle }))?.text).toBe('OFF')
+    expect(world.writes).toEqual([])
+    await ui.press({ key: 'save-config' })
+    expect(JSON.parse(world.writes[0]!).enabled).toBe(false)
+    expect(world.changes).toEqual([])
+    await ui.unmount()
+    await openConfig($)
+    const reopened = await mountConfig($, surface)
+    expect((await reopened.find({ key: toggle }))?.text).toBe('OFF')
     await reopened.unmount()
   })
 }
@@ -735,7 +830,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
       expect(local.turnDurationVisible).toBeUndefined()
       expect(local.turnDurationSpacing).toBeUndefined()
       expect(local.i18n).toBeUndefined()
-      expect(world.paths).toEqual(['/test-home/.config/my-cc-mods/config.json'])
+      expect(world.paths.map(path => path.replace(/\\/gu, '/').replace(/^[A-Za-z]:/u, ''))).toEqual(['/test-home/.config/my-cc-mods/config.json'])
       expect(world.source).toBe('en')
       await ui.select({ key: 'turn-duration-mode', value: 'native' })
       await ui.press({ key: 'save-config' })

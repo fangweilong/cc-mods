@@ -154,12 +154,29 @@ for (const code of [0, 8, 11, 12, 27, 31, 127]) {
   })
 }
 
-for (const key of ['doneAt', 'budget', 'waiting', 'completed', '__proto__', 'secret-file-content']) {
+for (const key of ['doneAt', 'budget', 'completed', '__proto__', 'secret-file-content']) {
   test(`rejects unsupported turn-duration template keys without disclosing them: ${key}`, () => {
     const turnDuration = { elapsed: '本轮用时 {duration}', [key]: 'secret-template' }
     expect(() => parseLanguagePack(JSON.stringify({ ...JA_DATA, turnDuration }))).toThrow('turnDuration: unknown template key')
   })
 }
+
+test('loads the optional waiting template independently of elapsed', () => {
+  const pack = parseLanguagePack(JSON.stringify({ ...JA_DATA, turnDuration: { waiting: '待機中 {agents} 件' } }))
+  expect(pack.turnDuration).toEqual({ waiting: '待機中 {agents} 件' })
+  expect(() => parseLanguagePack(JSON.stringify({ ...JA_DATA, turnDuration: { waiting: '{duration}' } })))
+    .toThrow('turnDuration.waiting: must include {agents}')
+  expect(() => parseLanguagePack(JSON.stringify({ ...JA_DATA, turnDuration: { waiting: '{agents} {duration}' } })))
+    .toThrow('turnDuration.waiting: only {agents} is allowed')
+})
+
+test('loads spinner phases and rejects unknown or malformed ones', () => {
+  const pack = parseLanguagePack(JSON.stringify({ ...JA_DATA, phases: { thinking: '思考中', 'tool-use': '调用工具' } }))
+  expect(pack.phases).toEqual({ thinking: '思考中', 'tool-use': '调用工具' })
+  expect(() => parseLanguagePack(JSON.stringify({ ...JA_DATA, phases: { 'tool-input': '输入工具' } })))
+    .toThrow('phases: unknown key tool-input')
+  expect(() => parseLanguagePack(JSON.stringify({ ...JA_DATA, phases: [] }))).toThrow('phases: expected an object')
+})
 
 test('keeps legacy completed and duration validation even when elapsed is valid', () => {
   for (const fields of [

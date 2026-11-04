@@ -5,7 +5,8 @@
   "completed": "已完成",
   "duration": "{word}，用时 {duration}",
   "turnDuration": {
-    "elapsed": "本轮用时 {duration}"
+    "elapsed": "本轮用时 {duration}",
+    "waiting": "等待 {agents} 个后台 Agent 完成"
   },
   "hints": {
     "shortcuts": "查看快捷键",
@@ -15,7 +16,22 @@
     "collapse": "收起",
     "history": "查看历史",
     "cycleMode": "切换模式",
-    "acceptSuggestion": "接受建议"
+    "acceptSuggestion": "接受建议",
+    "newline": "换行",
+    "commands": "命令",
+    "filePaths": "文件路径",
+    "sideQuestion": "侧问",
+    "subagents": "查看子代理",
+    "interruptAndSend": "中断并发送",
+    "queue": "排队",
+    "undoDelete": "撤销删除",
+    "pasteDeleted": "粘贴已删除文本"
+  },
+  "phases": {
+    "thinking": "思考中",
+    "requesting": "等待响应",
+    "tool-use": "调用工具",
+    "responding": "回复中"
   },
   "modes": {
     "focus": "专注模式",

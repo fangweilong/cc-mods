@@ -237,12 +237,21 @@ export const register: Register = (on, options) => {
       case 'TurnDuration': {
         // 仅耗时组件订阅独立配置；不从 word/onScreen 推断原生隐藏、后台状态或统计。
         const config = await currentTurnDuration($)
-        const model = createTurnDurationViewModel(e.props.durationMs, pack.turnDuration?.elapsed, config)
+        const waitingFor = e.props.waitingFor
+        const model = createTurnDurationViewModel(
+          e.props.durationMs,
+          pack.turnDuration?.elapsed,
+          config,
+          waitingFor ? { agents: waitingFor.agents.length, workflows: waitingFor.workflows } : undefined,
+          pack.turnDuration?.waiting,
+        )
         const tree = renderTurnDuration(model)
         return tree === undefined ? next(e) : tree
       }
       case 'Spinner': {
-        const word = SPINNER_WORDS.has(e.props.word.toLowerCase()) && pack.running ? pack.running : e.props.word
+        // 阶段译词优先于通用运行词；message 覆盖 word 时仍按其原有语义透传。
+        const phase = e.props.mode === 'tool-input' ? undefined : pack.phases?.[e.props.mode]
+        const word = phase ?? (SPINNER_WORDS.has(e.props.word.toLowerCase()) && pack.running ? pack.running : e.props.word)
         const message = e.props.message === null ? null : translateExact(e.props.message, pack.messages)
         if (message !== e.props.message) return next({ ...e, props: { ...e.props, word, message } })
         if (message !== null) recordSample('spinner', message)

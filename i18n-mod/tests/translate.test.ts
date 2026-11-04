@@ -14,6 +14,16 @@ for (const [original, translated] of [
   ['shift+tab to cycle modes', 'shift+tab 切换模式'],
   ['(shift+tab to cycle)', '(shift+tab 切换模式)'],
   ['tab to accept suggestion', 'tab 接受建议'],
+  ['ctrl+j for newline', 'ctrl+j 换行'],
+  ['Option+Enter for newlines', 'Option+Enter 换行'],
+  ['/ for commands', '/ 命令'],
+  ['@ for file paths', '@ 文件路径'],
+  ['/btw for side question', '/btw 侧问'],
+  ['/tasks to see subagents', '/tasks 查看子代理'],
+  ['enter to interrupt and send', 'enter 中断并发送'],
+  ['ctrl+x then enter to queue', 'ctrl+x then enter 排队'],
+  ['ctrl+y to undo delete', 'ctrl+y 撤销删除'],
+  ['Ctrl+Y to paste deleted text', 'Ctrl+Y 粘贴已删除文本'],
   ['  ? for shortcuts  ', '  ? 查看快捷键  '],
   ['? for shortcuts · esc to interrupt | custom hint', '? 查看快捷键 · esc 中断 | custom hint'],
   ['ctrl+o to expand  esc to interrupt', 'ctrl+o 展开  esc 中断'],
@@ -47,6 +57,8 @@ test('only translates complete single-line hints for PromptHint', () => {
 test('translates verified static PromptHint fragments without losing separators or untranslated hints', () => {
   const text = 'install gh for PR status · esc to interrupt · ← for agents'
   expect(translatePromptHint(text, zhCN)).toBe('install gh for PR status · esc 中断 · ← for agents')
+  expect(translatePromptHint('ctrl+j for newline · / for commands · @ for file paths', zhCN))
+    .toBe('ctrl+j 换行 · / 命令 · @ 文件路径')
   expect(translatePromptHint(text, en)).toBe(text)
   expect(translatePromptHint('? for shortcuts  |  esc to interrupt', { ...zhCN, hints: { shortcuts: '快捷键' } }))
     .toBe('? 快捷键  |  esc to interrupt')

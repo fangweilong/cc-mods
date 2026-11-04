@@ -7,7 +7,11 @@ export const ZH_DATA = {
   hints: {
     shortcuts: '查看快捷键', interrupt: '中断', background: '转入后台运行', expand: '展开',
     collapse: '收起', history: '查看历史', cycleMode: '切换模式', acceptSuggestion: '接受建议',
+    newline: '换行', commands: '命令', filePaths: '文件路径', sideQuestion: '侧问',
+    subagents: '查看子代理', interruptAndSend: '中断并发送', queue: '排队',
+    undoDelete: '撤销删除', pasteDeleted: '粘贴已删除文本',
   },
+  phases: { thinking: '思考中', requesting: '等待响应', 'tool-use': '调用工具', responding: '回复中' },
   modes: { focus: '专注模式', 'memory paused': '记忆已暂停' },
   messages: { 'Thinking…': '思考中…' },
   notices: { 'Update available': '有可用更新', 'Welcome back!': '欢迎回来！' },
@@ -32,7 +36,7 @@ export const ZH_DATA = {
 export const zhCN = parseLanguagePack(JSON.stringify(ZH_DATA))
 export const JA_DATA = { id: 'ja', name: '日本語', hints: { shortcuts: 'ショートカット' } }
 // 自定义耗时行使用独立 fixture；保留上面的旧 schema fixture 以覆盖无模板兼容。
-export const ZH_DURATION_DATA = { ...ZH_DATA, turnDuration: { elapsed: '本轮用时 {duration}' } }
+export const ZH_DURATION_DATA = { ...ZH_DATA, turnDuration: { elapsed: '本轮用时 {duration}', waiting: '等待 {agents} 个后台 Agent 完成' } }
 export const JA_DURATION_DATA = { id: 'ja', name: '日本語', turnDuration: { elapsed: 'このターンの所要時間 {duration}' } }
 
 export function mockWorld(on: On) {

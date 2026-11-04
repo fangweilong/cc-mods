@@ -2,7 +2,7 @@
 
 仓库地址：<https://github.com/fangweilong/cc-mods>
 
-Claude Code Mod 集合，提供状态栏、Subagent 实时面板、用户输入框增强和部分界面本地化。每个子目录都是一个独立 Mod，可单独安装、验证和使用；不要把多个 Mod 的文件合并到同一目录。
+Claude Code Mod 集合，提供状态栏、Subagent 实时面板、用户输入框增强、终端图片渲染和部分界面本地化。每个子目录都是一个独立 Mod，可单独安装、验证和使用；不要把多个 Mod 的文件合并到同一目录。
 
 ## 统一可视化配置
 
@@ -19,6 +19,7 @@ Claude Code Mod 集合，提供状态栏、Subagent 实时面板、用户输入�
 | 状态栏与配置面板 | `en` / `zh` 显示语言、状态栏位置（现有位置 / 输入框下方）、显示模式（完整 / 简洁）、模块开关和顺序；新增回合步骤、回合原因、工具次数开关 |
 | 时间显示 | 插件启用开关、TPS/Token 显示开关、时间格式规则；显示用户消息发送时间、工具调用耗时与 Token、每段回答的 TPS |
 | 用户输入框 | 标题、颜色、横竖线和四角符号 |
+| 终端图片 | 插件启用开关、终端能力策略（自动 / 总是尝试 / 总是不显示）、最大列数与行数、用户粘贴 / 助手回复 / 工具结果三个来源开关 |
 | 语言与时间 → i18n | 语言代码或 JSON 路径、简体中文/English 原生语言选择器、重新加载已保存的语言包；耗时行原生/自定义、显隐、顶部间距及取消草稿 |
 | Subagent 实时面板 | 当前自动工作，没有可调配置；打开/清理命令仍保留 |
 
@@ -41,6 +42,7 @@ Claude Code Mod 集合，提供状态栏、Subagent 实时面板、用户输入�
 | `todo-panel/` | `todo-panel` | 监听 Task 工具（`TaskCreate`/`TaskUpdate`/`TaskList`/`TaskGet`，兼容 `TodoWrite`）成功结果，自动打开独立任务进度 Pane；与 Subagent 面板分离。 |
 | `notification-mod/` | `notification-mod` | 主会话完成或失败时使用 `$.ui.notify` 发送成功/失败通知；主动中断和 Subagent 不通知。 |
 | `project-files/` | `project-files` | 通过 `/project-files` 打开独立文件浏览 Pane，使用 `$.fs` 浏览当前项目目录和预览文件。 |
+| `terminal-image/` | `terminal-image` | 在终端内渲染用户粘贴、助手 Markdown 和工具结果中的 PNG；按终端图形协议能力自动显示或隐藏，不支持时不占位。 |
 
 ### 各 Mod 的边界
 
@@ -53,6 +55,7 @@ Claude Code Mod 集合，提供状态栏、Subagent 实时面板、用户输入�
 - `todo-panel` 只观察成功的 Task / TodoWrite 工具结果并渲染独立任务面板，不修改任务数据，不处理 Subagent transcript。
 - `notification-mod` 只观察主会话 `turn.complete` 并调用 `$.ui.notify`；不判断 OS 窗口焦点，不通知 Subagent，不回退 toast。
 - `project-files` 只在当前 session cwd 范围内通过 `$.fs` 浏览和预览文件，不调用外部进程或创建 OS 窗口。
+- `terminal-image` 只观察终端面的 `UserMessage`、`AssistantMessage` 和工具行渲染，插入宿主 `<Image>` 元素；不修改消息内容、工具结果或用例数据，不发起网络请求。
 
 ## 环境要求
 
@@ -82,6 +85,7 @@ claude --plugin-dir ".\timestamp-mod"
 claude --plugin-dir ".\todo-panel"
 claude --plugin-dir ".\notification-mod"
 claude --plugin-dir ".\project-files"
+claude --plugin-dir ".\terminal-image"
 ```
 
 也可以使用绝对路径：
@@ -96,6 +100,7 @@ claude --plugin-dir "D:\Codes\other\cc-mods\timestamp-mod"
 claude --plugin-dir "D:\Codes\other\cc-mods\todo-panel"
 claude --plugin-dir "D:\Codes\other\cc-mods\notification-mod"
 claude --plugin-dir "D:\Codes\other\cc-mods\project-files"
+claude --plugin-dir "D:\Codes\other\cc-mods\terminal-image"
 ```
 
 需要面板和功能 Mod 同时可用时，在同一次启动中加载各目录，例如不加载状态栏、只配置输入框和 i18n：
@@ -168,7 +173,7 @@ macOS/Linux 示例：
 }
 ```
 
-配置完成后重启 Claude Code。该变量应指向集合仓库根目录，即包含 `cc-mods-config/`、`statusline-mod/`、`subagent-split-view/`、`user-prompt-frame/`、`i18n-mod/` 和 `timestamp-mod/` 的目录；如果只想临时加载某一个 Mod，请继续使用 `--plugin-dir` 方式。
+配置完成后重启 Claude Code。该变量应指向集合仓库根目录，即包含 `cc-mods-config/`、`statusline-mod/`、`subagent-split-view/`、`user-prompt-frame/`、`i18n-mod/`、`timestamp-mod/` 和 `terminal-image/` 等子目录的目录；如果只想临时加载某一个 Mod，请继续使用 `--plugin-dir` 方式。
 
 ### 方式四：复制到本地 Mod 开发目录
 
@@ -270,6 +275,16 @@ macOS/Linux 示例：
 
 面板只读取 session cwd 范围内的目录和文件，不创建外部终端窗口。
 
+### `terminal-image`
+
+加载后自动在终端面渲染三类 PNG：用户粘贴的图片附件、助手回复中 Markdown 指向的本地 PNG、工具结果中的内联 PNG 图片块。用户消息和工具结果会在原内容下方追加图片，助手回复追加在该段 Markdown 之后；用户消息中的 `[Image #N]` 占位保留，避免看起来像丢图。图片张数不设上限，单张占满宽度，多张按可用宽度并排，放不下自动换行。
+
+渲染前按环境变量探测终端能力：Kitty、Ghostty、WezTerm 视为支持；VS Code 集成终端、Apple Terminal、Windows Terminal 和 `TERM=dumb` 视为不支持，直接不插入图片、不占位；tmux 与其他未知终端交给宿主 `<Image>` 再次判断。可用 `/terminal-image` 查看当前探测结果，或用 `CC_TERMINAL_IMAGE=on|off` 手动覆盖。
+
+加载 `cc-mods-config` 后，在 `/my-cc-mods-config` 的“图片”页签配置插件开关、终端能力策略、最大列数/行数，以及用户粘贴、助手回复、工具结果三个来源；保存后写入统一配置文件的 `image` 段，功能 Mod 监听成功写入自动刷新。
+
+只处理 PNG 本地文件；JPEG、GIF、WebP、SVG、网络图片和数据 URI 不渲染。完整边界见 [terminal-image/README.md](./terminal-image/README.md)。
+
 ### `subagent-split-view`
 
 Subagent 启动后会自动尝试打开右侧面板，也可以手动打开：
@@ -355,6 +370,12 @@ claude plugin validate .
 claude plugin test .
 ```
 
+```powershell
+cd ..\terminal-image
+claude plugin validate .
+claude plugin test .
+```
+
 也可以从仓库根目录直接执行：
 
 ```powershell
@@ -370,6 +391,8 @@ claude plugin validate .\i18n-mod
 claude plugin test .\i18n-mod
 claude plugin validate .\timestamp-mod
 claude plugin test .\timestamp-mod
+claude plugin validate .\terminal-image
+claude plugin test .\terminal-image
 ```
 
 ## 目录结构
@@ -411,6 +434,15 @@ cc-mods/
 │   ├── hooks/hooks.json
 │   ├── hooks/register.ts
 │   ├── types/index.d.ts
+│   └── tests/register.test.ts
+├── terminal-image/
+│   ├── .claude-plugin/plugin.json
+│   ├── hooks/hooks.json
+│   ├── hooks/register.tsx
+│   ├── hooks/config.ts
+│   ├── hooks/detect.ts
+│   ├── hooks/markdown.ts
+│   ├── hooks/png.ts
 │   └── tests/register.test.ts
 └── user-prompt-frame/
     ├── .claude-plugin/plugin.json

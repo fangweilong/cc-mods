@@ -29,6 +29,7 @@ export type StatuslinePosition = 'session-mode' | 'below-prompt'
 export type StatuslineDisplayMode = 'full' | 'compact'
 
 export type StatuslineConfig = {
+  enabled: boolean
   position: StatuslinePosition
   displayMode: StatuslineDisplayMode
   language: 'en' | 'zh'

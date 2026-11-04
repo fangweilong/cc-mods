@@ -59,6 +59,7 @@ Mod 读取与 Python 版本相同的配置文件：
 
 ```json
 {
+  "enabled": true,
   "position": "session-mode",
   "displayMode": "compact",
   "language": "en",
@@ -109,6 +110,7 @@ Mod 读取与 Python 版本相同的配置文件：
 
 支持：
 
+- `enabled`: 总开关，默认 `true`；设为 `false` 时不绘制状态栏，并把 `SessionMode` / `PromptHint` 交还原生 UI，同时跳过 Git、Agent 等采集
 - `position`: `session-mode`（现有位置，默认）/ `below-prompt`（输入框下方）；缺少或无效时沿用现有位置
 - `displayMode`: `full`（完整模式，带前缀图标）/ `compact`（简洁模式，默认，无前缀图标）；缺少或无效时使用简洁模式
 - `language`: `en` / `zh`
@@ -116,7 +118,7 @@ Mod 读取与 Python 版本相同的配置文件：
 - `modules`: 各模块启用/停用；新增 `turn_step`、`turn_reason`、`tool_count` 默认关闭
 - `promptFrame`: 用户输入框标题、边框颜色、横竖线及四角符号
 
-统一配置由独立的 [`cc-mods-config`](../cc-mods-config/README.md) 插件管理。加载该插件后执行 `/my-cc-mods-config`，可修改状态栏位置、显示模式、语言、模块开关与顺序。选择位置或显示模式后点击“保存配置”，状态栏自动切换；关闭面板不保存未提交的修改。
+统一配置由独立的 [`cc-mods-config`](../cc-mods-config/README.md) 插件管理。加载该插件后执行 `/my-cc-mods-config`，可修改状态栏总开关、位置、显示模式、语言、模块开关与顺序。选择位置或显示模式后点击“保存配置”，状态栏自动切换；关闭面板不保存未提交的修改。
 
 本 Mod 不注册配置命令、不渲染配置面板、不写配置文件，也不依赖配置插件才能运行。面板保存兼容配置文件后，状态栏会重新读取并刷新；手动修改文件则在下一次会话测量或回合结束时读取。配置插件不依赖状态栏，未加载本 Mod 时仍可使用面板预先配置。
 

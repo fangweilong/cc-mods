@@ -22,14 +22,15 @@ claude --plugin-dir "./cc-mods-config" --plugin-dir "./user-prompt-frame"
 
 运行 `/my-cc-mods-config` 会打开统一可视化配置面板，这是唯一的配置面板命令入口。面板使用 Tabs 分组，点击顶部 Tab 切换当前配置区域；保存/关闭操作始终固定在底部：
 
-- **Statusline / 状态栏**：使用 `Select` 选择面板语言、状态栏位置和显示模式；使用按钮启用/停用模块、调整模块顺序。细粒度模块包括回合步骤 `turn_step`、回合结束原因 `turn_reason`、本回合工具次数 `tool_count`，默认关闭以避免状态栏过长
+- **Statusline / 状态栏**：使用 `Select` 选择面板语言、状态栏位置和显示模式；使用按钮启用/停用整个状态栏以及各模块、调整模块顺序。状态栏总开关对应 `enabled`（默认 `true`），停用后不再绘制状态栏并把原生模式提示与输入框提示交还宿主。细粒度模块包括回合步骤 `turn_step`、回合结束原因 `turn_reason`、本回合工具次数 `tool_count`，默认关闭以避免状态栏过长
 - **Prompt frame / 输入框**：使用 `Input` 编辑用户输入框标题、颜色和边框符号
+- **Images / 图片**：启用/停用 `terminal-image`，选择终端能力策略（自动探测 / 总是尝试 / 总是不显示），设置图片最大列数与行数，并分别控制用户粘贴、助手回复和工具结果三个来源
 - **Language & time / 语言与时间**：使用 `Input` / `Select` 配置 i18n 语言代码或 JSON 路径、时间格式，以及重新加载或取消语言修改；使用独立按钮切换时间显示、TPS / Token 与“自动展开工具组”（默认关闭，保留原生工具组折叠）
 - **Subagents**：显示 Subagent 面板的使用提示；当前没有可调配置
 
 所有 Tab 都保留统一的保存和关闭操作；切换 Tab 不会提交草稿。
 
-配置按 `statusline-mod`、`timestamp-mod`、`user-prompt-frame`、`i18n-mod` 和 `subagent-split-view` 分布在对应 Tab 中，避免单页表单过长。选项使用原生 `Select` 和 `Input` 控件，Tab 使用可点击按钮切换；当前 Tab 之外的控件不会抢占焦点或参与编辑。Subagent Tab 仅提示当前没有可调配置。
+配置按 `statusline-mod`、`timestamp-mod`、`user-prompt-frame`、`terminal-image`、`i18n-mod` 和 `subagent-split-view` 分布在对应 Tab 中，避免单页表单过长。选项使用原生 `Select` 和 `Input` 控件，Tab 使用可点击按钮切换；当前 Tab 之外的控件不会抢占焦点或参与编辑。Subagent Tab 仅提示当前没有可调配置。
 
 修改后点击 `Save configuration` / 保存配置统一提交；`Close` 不保存未提交的草稿。i18n 需同时加载 `i18n-mod`，没有加载时提示不可用，宿主策略锁定时仅显示只读来源。
 
@@ -41,12 +42,12 @@ Subagent 面板当前没有可调配置。后续新增可调项也应统一接�
 
 ## 存储与职责
 
-- 状态栏与输入框继续使用 `~/.config/my-cc-mods/config.json`，保留 `language`、`order`、`modules`、`promptFrame` 格式，新增 `position`（`session-mode` / `below-prompt`）与 `displayMode`（`full` / `compact`）；`modules` 兼容新增 `turn_step`、`turn_reason`、`tool_count`，三者默认关闭；时间显示使用 `timestamp.enabled`、`timestamp.format` 与 `timestamp.tps`，工具组自动展开使用独立 boolean `timestamp.autoExpandToolGroups`（默认 `false`）；旧配置缺少位置字段时沿用现有位置，缺少显示模式或值无效时使用简洁模式（`compact`），缺少时间配置时启用 `HH:mm:ss`，缺少自动展开字段或值不是 boolean 时保留原生工具组折叠，无需迁移。
+- 状态栏与输入框继续使用 `~/.config/my-cc-mods/config.json`，保留 `language`、`order`、`modules`、`promptFrame` 格式，新增 `enabled`（状态栏总开关，默认 `true`，缺失时视为启用）、`position`（`session-mode` / `below-prompt`）与 `displayMode`（`full` / `compact`）；`modules` 兼容新增 `turn_step`、`turn_reason`、`tool_count`，三者默认关闭；时间显示使用 `timestamp.enabled`、`timestamp.format` 与 `timestamp.tps`，工具组自动展开使用独立 boolean `timestamp.autoExpandToolGroups`（默认 `false`）；终端图片使用 `image.enabled`、`image.mode`（`auto` / `on` / `off`）、`image.maxColumns`、`image.maxRows`、`image.showUserImages`、`image.showAssistantImages`、`image.showToolImages`，缺省为启用、自动探测、48×16 且三个来源全部开启；旧配置缺少位置字段时沿用现有位置，缺少显示模式或值无效时使用简洁模式（`compact`），缺少时间配置时启用 `HH:mm:ss`，缺少自动展开字段或值不是 boolean 时保留原生工具组折叠，无需迁移。
 - i18n 继续通过宿主 `userConfig` 保存 `i18n-mod.language`，不直接写 `settings.json`，也不向上述 JSON 复制语言来源。
 - 面板的草稿与错误状态归属 `cc-mods-config`，不访问其他 Mod 的 `$.state`。
 - 不绘制状态栏、不隐藏原生快捷提示、不订阅模型或 Agent 的运行事件。
 - 状态栏与输入框的配置即使未加载对应 Mod 也可预先保存；时间显示配置即使未加载 `timestamp-mod` 也可预先保存；i18n 配置需加载 `i18n-mod` 才可使用，宿主锁定时显示只读。
-- 各功能 Mod 独立读取自己的设置，不通过配置插件的运行时状态获取设置。状态栏监听兼容文件的成功写入以刷新，输入框在渲染消息时读取 `promptFrame`，时间显示在渲染用户消息和工具行时读取 `timestamp`。
+- 各功能 Mod 独立读取自己的设置，不通过配置插件的运行时状态获取设置。状态栏监听兼容文件的成功写入以刷新，输入框在渲染消息时读取 `promptFrame`，时间显示在渲染用户消息和工具行时读取 `timestamp`，终端图片监听兼容文件写入并读取 `image`。
 
 配置插件与各功能 Mod 各自保留兼容格式的默认值及规范化逻辑，不使用跨目录模块导入，确保每个插件目录可单独复制、安装和验证。
 
@@ -59,7 +60,7 @@ claude plugin validate ./cc-mods-config
 claude plugin test ./cc-mods-config
 ```
 
-测试覆盖 terminal/desktop 面板、Tabs 切换与当前 Tab 内容隔离、中英文 Mod 标题、原生 Select/Input 控件、状态栏位置和完整/简洁模式选择/保存/重新打开及旧配置默认值、模式无效值回退、自动展开工具组的独立开关与默认原生折叠、严格 boolean 规范化、保存/重新打开/取消及失败重试、唯一命令注册与已移除入口不再打开面板、无功能 Mod 时独立保存、兼容文件读取、草稿取消、i18n 校验和锁定策略、部分保存失败与重试。
+测试覆盖 terminal/desktop 面板、Tabs 切换与当前 Tab 内容隔离、中英文 Mod 标题、原生 Select/Input 控件、状态栏位置和完整/简洁模式选择/保存/重新打开及旧配置默认值、模式无效值回退、自动展开工具组的独立开关与默认原生折叠、终端图片设置规范化与保存、严格 boolean 规范化、保存/重新打开/取消及失败重试、唯一命令注册与已移除入口不再打开面板、无功能 Mod 时独立保存、兼容文件读取、草稿取消、i18n 校验和锁定策略、部分保存失败与重试。
 
 类型声明由 Claude Code 在加载后生成到 `.claude-plugin/types/`，无需安装 npm 依赖。
 

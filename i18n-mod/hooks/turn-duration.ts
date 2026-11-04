@@ -2,9 +2,12 @@ import type { RenderElement } from 'claude-code'
 import type { TurnDurationConfig } from '../types'
 
 export type TurnDurationViewModel =
-  | { kind: 'native'; reason: 'native-mode' | 'missing-template' | 'invalid-template' | 'invalid-duration' }
+  | { kind: 'native'; reason: 'native-mode' | 'missing-template' | 'invalid-template' | 'invalid-duration' | 'missing-waiting-template' | 'invalid-waiting-template' | 'workflow-waiting' }
   | { kind: 'hidden' }
   | { kind: 'custom'; text: string; marginTop: 0 | 1 }
+
+/** 原生等待行报告的后台任务；workflow 无法用单个 Agent 模板准确表达。 */
+export type TurnDurationWaiting = { agents: number; workflows: number }
 
 /** 接受注册入口的原始 options；只认可精确值，不将字符串或数字强制转为 boolean。 */
 export function normalizeTurnDurationConfig(options: Readonly<Record<string, unknown>> = {}): TurnDurationConfig {
@@ -35,14 +38,37 @@ function validTemplate(template: string): boolean {
     && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(template)
 }
 
-/** 不接受 word、回合历史或任务状态；原文模式由注册模块提前透传。 */
+function validWaitingTemplate(template: string): boolean {
+  return template.includes('{agents}')
+    && !/[{}]/u.test(template.replace(/\{agents\}/gu, ''))
+    && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(template)
+}
+
+/**
+ * 不接受 word、回合历史或任务状态；原文模式由注册模块提前透传。
+ * 等待行只替换后台 Agent 数；含 workflow 时回退原生，避免少报等待项。
+ */
 export function createTurnDurationViewModel(
   durationMs: number,
   template: string | undefined,
   config: TurnDurationConfig,
+  waiting?: TurnDurationWaiting,
+  waitingTemplate?: string,
 ): TurnDurationViewModel {
   if (config.mode === 'native') return { kind: 'native', reason: 'native-mode' }
   if (!config.visible) return { kind: 'hidden' }
+  if (waiting && (waiting.agents > 0 || waiting.workflows > 0)) {
+    if (waiting.workflows > 0) return { kind: 'native', reason: 'workflow-waiting' }
+    if (waitingTemplate === undefined) return { kind: 'native', reason: 'missing-waiting-template' }
+    if (typeof waitingTemplate !== 'string' || !validWaitingTemplate(waitingTemplate)) {
+      return { kind: 'native', reason: 'invalid-waiting-template' }
+    }
+    return {
+      kind: 'custom',
+      text: waitingTemplate.replace(/\{agents\}/gu, () => String(waiting.agents)),
+      marginTop: config.spacing === 'separated' ? 1 : 0,
+    }
+  }
   if (template === undefined) return { kind: 'native', reason: 'missing-template' }
   if (typeof template !== 'string' || !validTemplate(template)) return { kind: 'native', reason: 'invalid-template' }
   const duration = formatTurnDuration(durationMs)

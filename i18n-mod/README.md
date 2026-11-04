@@ -101,7 +101,7 @@ claude --plugin-dir ".\i18n-mod"
 
 - 自定义且显示时，用公开 `durationMs` 按秒向下取整，使用 `d` / `h` / `m` / `s` 紧凑单位并省略零值单位；不足一秒为 `0s`，`64000 → 1m 4s`。不依赖已知完成词，未知 `word` 也不推断任务状态。
 - 缺少 `turnDuration.elapsed` 或耗时为负数、NaN、Infinity 时，显示分支整行回退原生，不拼接半句英文。原文/原生模式优先；自定义隐藏分支则优先于模板和耗时检查，不调用 `next(e)`，返回无符号、文字和间距的空树。
-- **自定义显隐是独立契约，不等同于原生隐藏设置，也不自动继承未公开的 `showTurnDuration`。** v1 不显示原生精确结束时刻、后台等待/仍运行任务数、预算/提醒、隐藏消息数，也不复刻原生自动间距；不把当前时间或 Agent 数量冒充原生数据。需要这些行为请切回 `native`。
+- **自定义显隐是独立契约，不等同于原生隐藏设置，也不自动继承未公开的 `showTurnDuration`。** v1 不显示原生精确结束时刻、预算/提醒、隐藏消息数，也不复刻原生自动间距。等待行仅在 `waitingFor` 报告后台 Agent 时显示 Agent 数；同时有 workflow 或缺少 `waiting` 模板时回退原生，不把当前时间或 Agent 数量冒充原生数据。需要这些行为请切回 `native`。
 - 自定义路径直接返回整行树，不追加原生节点；会截断下游同位置 hook。原生/English/回退路径继续钩子链，其他 Mod 仍可能改写该位置；上游若已短路，本 Mod 不一定执行，不能保证覆盖同位置的其他 Mod。
 
 隐藏零占位、宽窄窗换行、离屏滚动重绘、真实 reload/插件热重载、后台任务及切回原生的真实终端结果仍待用户验收。自动化挂载/fixture 只验证返回树和钩子行为，不等同于真实原生集成验收；本节示例不是终端实测截图。进度与待验项目见[实施计划任务 7](../docs/plans/2026-10-16-turn-duration-plan.md#11-任务-7真实终端验收与文档)。
@@ -129,8 +129,9 @@ claude --plugin-dir ".\i18n-mod"
 | `id`、`name` | 必填字符串；`id` 为语言代码，`en` 保留给原文模式。按代码加载时，`id` 必须匹配所选代码 |
 | `running` | 可选，运行中状态显示标签 |
 | `completed`、`duration` | 兼容旧语言包的可选字段，当前不用于渲染；`completed` 为字符串，`duration` 为包含 `{duration}` 的模板字符串；不映射为新耗时模板 |
-| `turnDuration` | 可选对象，第一版只接受可选字符串 `elapsed`；存在时必须含 `{duration}`，规则见下文 |
-| `hints` | 可选。支持 `shortcuts`、`interrupt`、`background`、`expand`、`collapse`、`history`、`cycleMode`、`acceptSuggestion`；只填译文，快捷键由代码保留 |
+| `turnDuration` | 可选对象，接受 `elapsed` 与 `waiting`：`elapsed` 必须含 `{duration}`；`waiting` 必须含 `{agents}`，用于等待后台 Agent 的行 |
+| `hints` | 可选。支持 `shortcuts`、`interrupt`、`background`、`expand`、`collapse`、`history`、`cycleMode`、`acceptSuggestion`、`newline`、`commands`、`filePaths`、`sideQuestion`、`subagents`、`interruptAndSend`、`queue`、`undoDelete`、`pasteDeleted`；只填译文，快捷键由代码保留 |
+| `phases` | 可选 Spinner 阶段词：`thinking`、`requesting`、`tool-use`、`responding`；存在时优先于 `running` 统一词 |
 | `modes`、`notices`、`messages` | 可选的 `原文 → 译文` 字符串词典，精确匹配 |
 | `tools` | 可选的工具完整 description `原文 → 译文` 字符串词典，精确匹配，不改工具名、参数 schema 或延迟状态 |
 | `config` | 可选的 `/config` 配置行词典；按配置 `key` 提供 `label`、`description`，缺失字段保留原文；`options` 仅作为兼容数据保留，原生面板不暴露可改写的选项值，运行时不会应用 |
@@ -151,6 +152,10 @@ claude --plugin-dir ".\i18n-mod"
 
 `turnDuration` / `elapsed` 均可省略，`turnDuration: {}` 也可加载；自定义且显示时，缺失模板让整行回退原生，不默认套用中文。`elapsed` 若提供，必须是含 `{duration}` 的字符串，仅允许这一占位符（可重复），不接受 `{word}`、表达式、其他/残缺花括号或安全规则禁止的控制字符。显式空串、纯空白、非字符串及未知模板键均被拒绝，不是成功加载后的缺失回退；切换或 reload 失败保留当前语言包。语言包只保存显示数据，建议保持“本轮用时”这样的中性语义，不声称后台全部完成。编辑后使用面板“重新加载语言包”或 `/i18n reload` 应用，重绘不重读文件。
 
+`turnDuration.waiting` 只用于原生报告等待后台 Agent 的耗时行，必须含 `{agents}` 且只允许该占位符；等待时优先于 `elapsed`。等待中同时有 workflow 时回退原生，避免少报等待项；没有 `waiting` 模板也整行回退原生。
+
+`phases` 只接受上述四个阶段键；未提供或值为空时保留通用 `running` 词与原文回退，不改变阶段判定。
+
 `command` 支持 `description`、`current`、`source`、`available`、`switched`、`reloaded`、`unsupported`、`loadFailed`、`saveFailed`、`usage`；保留对应的 `{language}`、`{source}`、`{languages}`、`{reason}` 占位符。
 
 缺失的界面译文保留原文，不强制继承中文。加载时校验对象、字段类型、已知字段和键，拒绝不正确结构及不安全控制字符；支持 UTF-8 BOM。语法错误不回显文件内容。文件读取上限沿用宿主的 4 MiB 限制。
@@ -163,14 +168,14 @@ claude --plugin-dir ".\i18n-mod"
 
 | 界面位置 | 当前中文覆盖 | 保留内容 |
 | --- | --- | --- |
-| 运行状态 `Spinner` | 识别 **134 个原文状态词**，统一显示“处理中”；另有 **10 条精确状态文案**，包括“思考中”“等待响应”“正在压缩会话”及省略号变体 | 动态任务描述、后缀、宿主计时及 Token 信息 |
-| 输入框提示 `PromptHint` | **8 类纯文本快捷提示**：快捷键、中断、后台运行、展开、收起、历史、切换模式、接受建议；没有 `tail` 且每一段均为已确认静态文本时翻译 | 实际快捷键、分隔符；含任务按钮、链接、未知片段或已有自定义尾部的行原样透传 |
+| 运行状态 `Spinner` | 识别 **134 个原文状态词**；配置 `phases` 后按 `thinking`、`requesting`、`tool-use`、`responding` 显示“思考中”“等待响应”“调用工具”“回复中”，否则回退统一“处理中”；另有 **10 条精确状态文案**，包括“思考中”“等待响应”“正在压缩会话”及省略号变体 | 动态任务描述、后缀、宿主计时及 Token 信息 |
+| 输入框提示 `PromptHint` | **17 类纯文本快捷提示**：快捷键、中断、后台运行、展开、收起、历史、切换模式、接受建议、换行、命令、文件路径、侧问、查看子代理、中断并发送、排队、撤销删除、粘贴已删除文本；没有 `tail` 且每一段均为已确认静态文本时翻译 | 实际快捷键、分隔符；含任务按钮、链接、未知片段或已有自定义尾部的行原样透传 |
 | 工具进度 `ToolProgress` | **1 类提示**：“转入后台运行”，复用快捷提示词典中的 `background` | 工具身份及执行行为 |
 | 模式标签 `SessionMode` | **6 条标签**：专注、记忆暂停、接受编辑、计划模式、自动模式、权限绕过 | 未知模式及顺序 |
 | 提示通知 `InfoNotice` | **7 条固定/前缀通知文案**，见下表 | 动态后缀、尾部命令、可见性信息及未收录提示 |
 | 后台任务通知 `UserMessage` | 仅 `origin.kind === 'task-notification'` 的行做前缀翻译 | 用户输入、其他会话/teammate 消息、任务 id 与耗时 |
 | 临时提示 `ui.toast` / 工具通知 `ui.notice` | 与通知共用前缀词典 | 动态后缀、路径、命令参数及未收录文本 |
-| 可选自定义耗时行 `TurnDuration`（仅 terminal） | 手动选 `custom` 且模板有效时显示“本轮用时 …”，不依赖完成词表 | 默认 `native`；English 保持原生。自定义不含原生结束时刻、后台及预算等统计 |
+| 可选自定义耗时行 `TurnDuration`（仅 terminal） | 手动选 `custom` 且模板有效时显示“本轮用时 …”；等待后台 Agent 时按 `waiting` 模板显示“等待 N 个后台 Agent 完成”，不依赖完成词表 | 默认 `native`；English 保持原生。自定义不含原生结束时刻、后台及预算等统计；等待中同时有 workflow 时回退原生 |
 | `/config` 配置行 | 按 `key` 翻译标签和说明 | 不改变配置值、选项值、锁定状态、隐藏状态及 `/config key=value` 行为；原生面板没有可改写选项值的 hook |
 | 斜杠命令 `command.describe` | 按命令名翻译补全菜单与 `/help` 中的描述和参数提示 | 不改变命令执行、参数取值、隐藏状态、立即执行标记及 provider |
 | 工具描述 `tool.describe` | 按完整 description 精确翻译 | 不改变工具名、参数 schema、工具调用及延迟状态 |

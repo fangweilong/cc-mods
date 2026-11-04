@@ -29,6 +29,7 @@ export type StatuslinePosition = 'session-mode' | 'below-prompt'
 export type StatuslineDisplayMode = 'full' | 'compact'
 
 export type StatuslineConfig = {
+  enabled: boolean
   position: StatuslinePosition
   displayMode: StatuslineDisplayMode
   language: 'en' | 'zh'
@@ -58,10 +59,22 @@ export type TimestampConfig = {
   autoExpandToolGroups: boolean
 }
 
+export type ImageMode = 'auto' | 'on' | 'off'
+
+export type ImageConfig = {
+  enabled: boolean
+  mode: ImageMode
+  maxColumns: number
+  maxRows: number
+  showUserImages: boolean
+  showAssistantImages: boolean
+  showToolImages: boolean
+}
+
 declare module 'claude-code' {
   interface PluginState {
     'cc-mods-config': {
-      config: StatuslineConfig & { timestamp: TimestampConfig }
+      config: StatuslineConfig & { timestamp: TimestampConfig; image: ImageConfig }
       i18nDraft: I18nConfigDraft
       turnDurationDraft: TurnDurationConfigDraft
     }

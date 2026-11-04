@@ -1,0 +1,8 @@
+{
+  "name": "terminal-image",
+  "version": "0.1.0",
+  "author": {
+    "name": "fangweilong"
+  },
+  "description": "Render PNG images in the terminal where its graphics protocol supports them, and hide them elsewhere."
+}

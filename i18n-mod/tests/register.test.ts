@@ -81,6 +81,8 @@ for (const surface of ['terminal', 'desktop'] as const) {
     ['gh auth login for PR status · esc to interrupt · ← for agents', 'gh auth login for PR status · esc 中断 · ← for agents'],
     ['? for shortcuts · esc to interrupt', '? 查看快捷键 · esc 中断'],
     ['ctrl+o to expand  esc to interrupt', 'ctrl+o 展开  esc 中断'],
+    ['ctrl+j for newline · / for commands · @ for file paths', 'ctrl+j 换行 · / 命令 · @ 文件路径'],
+    ['enter to interrupt and send · ctrl+x then enter to queue', 'enter 中断并发送 · ctrl+x then enter 排队'],
   ] as const) {
     test(`translates a verified plain compound hint ${hint} on ${surface}`, async ($, on) => {
       mockWorld(on)
@@ -135,11 +137,11 @@ for (const surface of ['terminal', 'desktop'] as const) {
       props: { word: 'Sauteing', message: 'Reading D:/work/Thinking.ts', suffix: '…', mode: 'tool-use' },
     })
     expect(JSON.parse((await ui.find({ type: 'Text' }))!.text)).toEqual({
-      word: '处理中', message: 'Reading D:/work/Thinking.ts', suffix: '…', mode: 'tool-use',
+      word: '调用工具', message: 'Reading D:/work/Thinking.ts', suffix: '…', mode: 'tool-use',
     })
     await ui.redraw({ word: 'FutureSpinner', message: 'Thinking…', suffix: '~', mode: 'thinking' })
     expect(JSON.parse((await ui.find({ type: 'Text' }))!.text)).toEqual({
-      word: 'FutureSpinner', message: '思考中…', suffix: '~', mode: 'thinking',
+      word: '思考中', message: '思考中…', suffix: '~', mode: 'thinking',
     })
     await ui.unmount()
   })
@@ -346,6 +348,65 @@ for (const mode of ['native', 'custom'] as const) {
     }
   }
 }
+
+for (const spacing of ['compact', 'separated'] as const) {
+  test(`renders localized waiting text for background agents on ${spacing} spacing`, {
+    options: { turnDurationMode: 'custom', turnDurationSpacing: spacing },
+  }, async ($, on) => {
+    mockDurationWorld(on)
+    let nativeCalls = 0
+    on('ui.render', { component: 'TurnDuration' }, () => {
+      nativeCalls++
+      return { type: 'Text', children: ['native waiting'] }
+    })
+    await start($)
+    const ui = await $.ui.mount({
+      plugin: 'i18n-mod', surface: 'terminal', component: 'TurnDuration',
+      props: {
+        word: 'Waiting', durationMs: 64000,
+        waitingFor: {
+          agents: [
+            { id: 'agent-1', agentType: 'general-purpose' },
+            { id: 'agent-2', agentType: 'Explore' },
+          ],
+          workflows: 0,
+        },
+        onScreen: null,
+      },
+    })
+    expect(await ui.drawn()).toEqual({
+      type: 'Box', props: { width: '100%', flexDirection: 'row', marginTop: spacing === 'separated' ? 1 : 0 },
+      children: [
+        { type: 'Box', props: { width: 2, minWidth: 2, flexShrink: 0 }, children: [{ type: 'Text', children: ['✻'] }] },
+        { type: 'Text', props: { dimColor: true }, children: ['等待 2 个后台 Agent 完成'] },
+      ],
+      part: { plugin: 'i18n-mod' },
+    })
+    expect(nativeCalls).toBe(0)
+    await ui.unmount()
+  })
+}
+
+test('forwards the native waiting line when workflows are also pending', async ($, on) => {
+  mockDurationWorld(on)
+  let nativeCalls = 0
+  on('ui.render', { component: 'TurnDuration' }, () => {
+    nativeCalls++
+    return { type: 'Text', children: ['native waiting'] }
+  })
+  await start($)
+  const ui = await $.ui.mount({
+    plugin: 'i18n-mod', surface: 'terminal', component: 'TurnDuration',
+    props: {
+      word: 'Waiting', durationMs: 64000,
+      waitingFor: { agents: [{ id: 'agent-1', agentType: 'general-purpose' }], workflows: 1 },
+      onScreen: null,
+    },
+  })
+  expect((await ui.find({ type: 'Text' }))?.text).toBe('native waiting')
+  expect(nativeCalls).toBeGreaterThan(0)
+  await ui.unmount()
+})
 
 for (const [spacing, marginTop] of [['compact', 0], ['separated', 1]] as const) {
   for (const hasTemplate of [true, false]) {

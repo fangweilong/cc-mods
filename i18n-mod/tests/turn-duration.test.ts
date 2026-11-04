@@ -156,3 +156,56 @@ for (const [spacing, marginTop] of [['compact', 0], ['separated', 1]] as const) 
     await ui.unmount()
   })
 }
+
+const waitingTemplate = '等待 {agents} 个后台 Agent 完成'
+
+test('uses the waiting template instead of elapsed while background agents run', () => {
+  for (const spacing of ['compact', 'separated'] as const) {
+    const model = createTurnDurationViewModel(
+      64000, template, { ...custom, spacing }, { agents: 2, workflows: 0 }, waitingTemplate,
+    )
+    expect(model).toEqual({
+      kind: 'custom', text: '等待 2 个后台 Agent 完成', marginTop: spacing === 'separated' ? 1 : 0,
+    })
+  }
+})
+
+test('waiting text does not depend on a valid duration', () => {
+  expect(createTurnDurationViewModel(NaN, template, custom, { agents: 1, workflows: 0 }, waitingTemplate))
+    .toEqual({ kind: 'custom', text: '等待 1 个后台 Agent 完成', marginTop: 0 })
+})
+
+test('falls back to the native line for workflows or a missing waiting template', () => {
+  expect(createTurnDurationViewModel(64000, template, custom, { agents: 1, workflows: 1 }, waitingTemplate))
+    .toEqual({ kind: 'native', reason: 'workflow-waiting' })
+  expect(createTurnDurationViewModel(64000, template, custom, { agents: 2, workflows: 0 }, undefined))
+    .toEqual({ kind: 'native', reason: 'missing-waiting-template' })
+  expect(createTurnDurationViewModel(64000, template, custom, { agents: 2, workflows: 0 }, '等待完成'))
+    .toEqual({ kind: 'native', reason: 'invalid-waiting-template' })
+})
+
+test('native and hidden modes still win over waiting', () => {
+  expect(createTurnDurationViewModel(64000, template, defaults, { agents: 2, workflows: 0 }, waitingTemplate))
+    .toEqual({ kind: 'native', reason: 'native-mode' })
+  expect(createTurnDurationViewModel(64000, template, { ...custom, visible: false }, { agents: 2, workflows: 0 }, waitingTemplate))
+    .toEqual({ kind: 'hidden' })
+})
+
+for (const waiting of ['', '等待完成', '等待 {duration} 个 Agent', '{agents} {{agents}}', '{agents}\u0000']) {
+  test(`refuses unsafe or incomplete waiting template ${JSON.stringify(waiting)} consistently with the schema`, () => {
+    expect(() => parseLanguagePack(JSON.stringify({ id: 'zh-CN', name: '中文', turnDuration: { waiting } }))).toThrow()
+    const model = createTurnDurationViewModel(64000, template, custom, { agents: 2, workflows: 0 }, waiting)
+    expect(model).toEqual({ kind: 'native', reason: 'invalid-waiting-template' })
+  })
+}
+
+test('loads a waiting template from a language pack and renders it', () => {
+  const pack = parseLanguagePack(JSON.stringify({
+    id: 'zh-CN', name: '中文', turnDuration: { waiting: '等待 {agents} 个后台任务' },
+  }))
+  const model = createTurnDurationViewModel(64000, undefined, custom, { agents: 3, workflows: 0 }, pack.turnDuration?.waiting)
+  expect(model).toEqual({ kind: 'custom', text: '等待 3 个后台任务', marginTop: 0 })
+  expect(renderTurnDuration(model)?.children?.[1]).toEqual({
+    type: 'Text', props: { dimColor: true }, children: ['等待 3 个后台任务'],
+  })
+})

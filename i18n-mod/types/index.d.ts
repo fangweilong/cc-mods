@@ -7,6 +7,18 @@ export type HintKey =
   | 'history'
   | 'cycleMode'
   | 'acceptSuggestion'
+  | 'newline'
+  | 'commands'
+  | 'filePaths'
+  | 'sideQuestion'
+  | 'subagents'
+  | 'interruptAndSend'
+  | 'queue'
+  | 'undoDelete'
+  | 'pasteDeleted'
+
+/** Spinner 行按回合阶段显示；tool-input 不在可见阶段内。 */
+export type SpinnerPhase = 'thinking' | 'requesting' | 'tool-use' | 'responding'
 
 export type CommandMessages = {
   description: string
@@ -37,6 +49,8 @@ export type TurnDurationConfig = {
 export type TurnDurationMessages = {
   /** 存在时必须是含 {duration} 的安全非空模板；缺失时整行回退原生。 */
   elapsed?: string
+  /** 等待后台 Agent 时使用，必须含 {agents}；缺失或含 workflow 等待时回退原生。 */
+  waiting?: string
 }
 
 export type ConfigTranslation = {
@@ -63,6 +77,7 @@ export type LanguagePack = {
   duration?: string
   turnDuration?: TurnDurationMessages
   hints?: Partial<Record<HintKey, string>>
+  phases?: Partial<Record<SpinnerPhase, string>>
   modes?: Readonly<Record<string, string>>
   notices?: Readonly<Record<string, string>>
   messages?: Readonly<Record<string, string>>

@@ -99,6 +99,7 @@ export type StatusSnapshot = {
 }
 
 export const DEFAULT_CONFIG: StatusConfig = {
+  enabled: true,
   position: 'session-mode',
   displayMode: 'compact',
   language: 'en',
@@ -217,6 +218,7 @@ let snapshot: StatusSnapshot = {
 
 function cloneConfig(value: StatusConfig): StatusConfig {
   return {
+    enabled: value.enabled,
     position: value.position,
     displayMode: value.displayMode,
     language: value.language,
@@ -231,12 +233,17 @@ export function normalizeConfig(value: unknown): StatusConfig {
   if (!value || typeof value !== 'object') return result
 
   const data = value as {
+    enabled?: unknown
     position?: unknown
     displayMode?: unknown
     language?: unknown
     order?: unknown
     modules?: unknown
     promptFrame?: unknown
+  }
+
+  if (typeof data.enabled === 'boolean') {
+    result.enabled = data.enabled
   }
 
   if (data.position === 'session-mode' || data.position === 'below-prompt') {
@@ -722,9 +729,14 @@ async function refreshAgents($: EngineInterface): Promise<void> {
   }
 }
 
-async function refreshSession($: EngineInterface, cwd: string): Promise<void> {
+async function refreshSession($: EngineInterface, cwd: string, reloadConfig = true): Promise<void> {
   snapshot = { ...snapshot, cwd, home: await homeDirectory($) }
-  await readConfig($, snapshot.home)
+  if (reloadConfig) await readConfig($, snapshot.home)
+  // 停用时仍需读取配置以响应后续重新启用，但不执行 Git / Agent 等采集。
+  if (!config.enabled) {
+    show($)
+    return
+  }
 
   try {
     const [model, usage] = await Promise.all([$.session.model(), $.session.usage()])
@@ -741,6 +753,7 @@ async function refreshSession($: EngineInterface, cwd: string): Promise<void> {
 
 async function refreshLiveData($: EngineInterface): Promise<void> {
   await readConfig($, snapshot.home)
+  if (!config.enabled) return
   const [env] = await Promise.all([detectEnvironment($), readGit($), refreshAgents($)])
   snapshot = { ...snapshot, env }
 }
@@ -762,6 +775,7 @@ function renderStatusRow($: EngineInterface, e: RenderInput<'SessionMode' | 'Pro
 
 export const register: Register = on => {
   on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
+    if (!config.enabled) return next(e)
     const { Box, Text } = $.ui.resolve(e)
     if (config.position === 'below-prompt') {
       const hint = await next(e)
@@ -774,7 +788,7 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'SessionMode' }, ($, e, next) => {
-    if (config.position !== 'session-mode') return next(e)
+    if (!config.enabled || config.position !== 'session-mode') return next(e)
     const { Text } = $.ui.resolve(e)
     // 用显式换行分隔模式提示和状态栏，不依赖容器的纵向布局。
     const modeText = e.props.modes.length > 0
@@ -794,7 +808,9 @@ export const register: Register = on => {
     const result = await next(e)
     if (result.deny === undefined && configPath && e.path.replace(/\\/gu, '/') === configPath.replace(/\\/gu, '/')) {
       await readConfig($, snapshot.home)
-      show($)
+      // 停用期间跳过了采集，重新启用时补一次完整刷新。
+      if (config.enabled) await refreshSession($, snapshot.cwd, false)
+      else show($)
     }
     return result
   })
