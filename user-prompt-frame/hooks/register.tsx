@@ -1,8 +1,12 @@
 import type { EngineInterface, Register } from 'claude-code'
 
 const DEFAULT_WIDTH = 72
-const MIN_WIDTH = 24
+/** 气泡最大宽度占可用视口的比例，右侧留白，贴近 IM 消息样式。 */
+const MAX_BUBBLE_RATIO = 0.7
+/** 气泡右侧留白，避开 transcript 行末的引擎标记。 */
 const VIEWPORT_GUTTER = 4
+/** 边框左右各 1 列，内容左右各留白 2 列。 */
+const FRAME_CHROME = 6
 const HORIZONTAL = '─'
 const NON_BREAKING_SPACE = ' '
 
@@ -81,6 +85,10 @@ function displayWidth(text: string): number {
   return Array.from(text).reduce((width, character) => width + characterWidth(character), 0)
 }
 
+function naturalContentWidth(text: string): number {
+  return text.split('\n').reduce((width, line) => Math.max(width, displayWidth(line)), 0)
+}
+
 function wrapText(text: string, width: number): string[] {
   const lines: string[] = []
 
@@ -128,21 +136,31 @@ export const register: Register = on => {
     const frame = await loadFrameConfig($)
     const { Box, Text } = $.ui.resolve(e)
     const viewportWidth = e.viewport?.columns ?? DEFAULT_WIDTH
-    const width = Math.max(MIN_WIDTH, viewportWidth - VIEWPORT_GUTTER)
-    const contentWidth = width - 6
-    const body = wrapText(e.props.text, contentWidth)
+    const availableWidth = Math.max(1, viewportWidth - VIEWPORT_GUTTER)
     const title = ` ${frame.title.replace(/[\r\n]/gu, ' ').trim()} `
-    const innerWidth = width - 2
-    const top = `${frame.topLeft}${frame.horizontal}${title}${frame.horizontal.repeat(Math.max(0, innerWidth - 1 - displayWidth(title)))}${frame.topRight}`
-    const bottom = `${frame.bottomLeft}${frame.horizontal.repeat(width - 2)}${frame.bottomRight}`
+    const titleWidth = displayWidth(title)
+    // 标题行至少要容下左右边框、一条横线和标题本身。
+    const maxBubbleWidth = Math.max(
+      titleWidth + 3,
+      Math.min(availableWidth, Math.floor(viewportWidth * MAX_BUBBLE_RATIO)),
+    )
+    const naturalWidth = naturalContentWidth(e.props.text) + FRAME_CHROME
+    const bubbleWidth = Math.min(maxBubbleWidth, Math.max(naturalWidth, titleWidth + 3))
+    const contentWidth = Math.max(1, bubbleWidth - FRAME_CHROME)
+    const body = wrapText(e.props.text, contentWidth)
+    const innerWidth = bubbleWidth - 2
+    const top = `${frame.topLeft}${frame.horizontal}${title}${frame.horizontal.repeat(Math.max(0, innerWidth - 1 - titleWidth))}${frame.topRight}`
+    const bottom = `${frame.bottomLeft}${frame.horizontal.repeat(bubbleWidth - 2)}${frame.bottomRight}`
 
     return (
-      <Box key={`prompt-frame-${e.requestId}`} width={width} flexDirection="column">
-        <Text weight="bold" color={frame.color}>{top}</Text>
-        {body.map((line, index) => (
-          <Text key={`prompt-line-${index}`}>{frame.vertical}{NON_BREAKING_SPACE.repeat(2)}{padLine(line, contentWidth)}{NON_BREAKING_SPACE.repeat(2)}{frame.vertical}</Text>
-        ))}
-        <Text weight="bold" color={frame.color}>{bottom}</Text>
+      <Box key={`prompt-frame-${e.requestId}`} width="100%" flexDirection="column" alignItems="flex-end">
+        <Box key={`prompt-bubble-${e.requestId}`} width={bubbleWidth} flexDirection="column">
+          <Text weight="bold" color={frame.color}>{top}</Text>
+          {body.map((line, index) => (
+            <Text key={`prompt-line-${index}`}>{frame.vertical}{NON_BREAKING_SPACE.repeat(2)}{padLine(line, contentWidth)}{NON_BREAKING_SPACE.repeat(2)}{frame.vertical}</Text>
+          ))}
+          <Text weight="bold" color={frame.color}>{bottom}</Text>
+        </Box>
       </Box>
     )
   })

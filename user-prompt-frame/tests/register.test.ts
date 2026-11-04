@@ -58,22 +58,26 @@ test('leaves task notifications and sender messages to the engine', async ($, on
 })
 
 for (const columns of [32, 80, 160, 240]) {
-  test(`preserves long mixed text and aligns rows at ${columns} columns`, async $ => {
+  test(`right-aligns a bounded bubble and aligns rows at ${columns} columns`, async $ => {
     const text = '现在继续测试，hello123。'.repeat(40)
     const ui = await $.ui.mount({
       plugin: 'user-prompt-frame',
       surface: 'terminal',
       component: 'UserMessage',
+      requestId: 'bubble-test',
       viewport: { columns, rows: 40 },
       props: { text, origin: { kind: 'composer' }, isExpanded: true },
     })
 
-    const frame = await ui.find({ type: 'Box' })
+    const frame = await ui.find({ type: 'Box', key: 'prompt-frame-bubble-test' })
+    const bubble = await ui.find({ type: 'Box', key: 'prompt-bubble-bubble-test' })
     const rows = await ui.findAll({ type: 'Text' })
     const body = rows.filter(row => row.text.startsWith('│'))
     const recovered = body.map(row => row.text.slice(3, -3).replace(/ +$/u, '')).join('')
 
-    expect(frame?.props.width).toBe(columns - 4)
+    expect(frame?.props.width).toBe('100%')
+    expect(frame?.props.alignItems).toBe('flex-end')
+    expect(bubble?.props.width).toBe(Math.floor(columns * 0.7))
     expect(recovered).toBe(text)
     expect(body.length).toBeGreaterThan(1)
 
@@ -85,6 +89,25 @@ for (const columns of [32, 80, 160, 240]) {
     await ui.unmount()
   })
 }
+
+test('shrinks the bubble to a short message and keeps it right-aligned', async $ => {
+  const ui = await $.ui.mount({
+    plugin: 'user-prompt-frame',
+    surface: 'terminal',
+    component: 'UserMessage',
+    requestId: 'short-bubble',
+    viewport: { columns: 80, rows: 24 },
+    props: { text: 'ok', origin: { kind: 'composer' }, isExpanded: false },
+  })
+
+  const frame = await ui.find({ type: 'Box', key: 'prompt-frame-short-bubble' })
+  const bubble = await ui.find({ type: 'Box', key: 'prompt-bubble-short-bubble' })
+  expect(frame?.props.alignItems).toBe('flex-end')
+  // 标题「 用户输入 」宽 10，加左右边框与一条横线至少需要 13 列。
+  expect(bubble?.props.width).toBe(13)
+  expect(await ui.find({ type: 'Text', text: /用户输入/ })).toBeDefined()
+  await ui.unmount()
+})
 
 test('preserves explicit newlines and blank lines', async $ => {
   const ui = await $.ui.mount({
