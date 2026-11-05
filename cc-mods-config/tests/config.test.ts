@@ -178,6 +178,7 @@ test('normalizes image settings and defaults legacy files', () => {
   expect(DEFAULT_CONFIG.image).toEqual({
     enabled: true,
     mode: 'auto',
+    blocks: 'auto',
     maxColumns: 48,
     maxRows: 16,
     showUserImages: true,
@@ -198,6 +199,7 @@ test('normalizes image settings and defaults legacy files', () => {
   }).image).toEqual({
     enabled: false,
     mode: 'off',
+    blocks: 'auto',
     maxColumns: 80,
     maxRows: 24,
     showUserImages: false,
@@ -211,6 +213,8 @@ test('normalizes image settings and defaults legacy files', () => {
     .toEqual(DEFAULT_CONFIG.image)
   expect(normalizeConfig({ image: { maxColumns: 1, maxRows: 255 } }).image)
     .toMatchObject({ maxColumns: 1, maxRows: 255 })
+  expect(normalizeConfig({ image: { blocks: 'on' } }).image.blocks).toBe('on')
+  expect(normalizeConfig({ image: { blocks: 'sometimes' } }).image.blocks).toBe('auto')
 })
 
 test('saves terminal-image settings into the unified config file', async ($, on) => {

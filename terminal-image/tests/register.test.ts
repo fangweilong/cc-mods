@@ -233,13 +233,68 @@ test('renders an inline tool result image on a supporting terminal', async ($, o
   await ui.unmount()
 })
 
-test('hides images on a terminal known to lack graphics support', async ($, on) => {
+test('falls back to character cells on a terminal without graphics support', async ($, on) => {
   mockSession(on, { TERM_PROGRAM: 'vscode' })
   await $.session.start({ cwd: '/work/project', surface: 'terminal', isInteractive: true })
 
   const ui = await mountToolUse($)
 
   expect(await ui.find({ type: 'Image' })).toBeUndefined()
+  const raster = await ui.find({ type: 'Raster' })
+  expect(raster).toBeDefined()
+  expect(raster?.props.columns).toBe(32)
+  expect(raster?.props.rows).toBe(16)
+  expect(typeof raster?.props.cells).toBe('string')
+  expect((raster?.props.cells as string).length).toBeGreaterThan(0)
+  // 下层工具行仍由 Mod 保留。
+  expect(await ui.find({ type: 'Text', text: 'call' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('honours blocks=off on a terminal without graphics support', async ($, on) => {
+  mockSession(on, { TERM_PROGRAM: 'vscode' }, { blocks: 'off' })
+  await $.session.start({ cwd: '/work/project', surface: 'terminal', isInteractive: true })
+
+  const ui = await mountToolUse($)
+
+  expect(await ui.find({ type: 'Image' })).toBeUndefined()
+  expect(await ui.find({ type: 'Raster' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('blocks=on replaces the native image element on a supporting terminal', async ($, on) => {
+  mockSession(on, { TERM_PROGRAM: 'WezTerm' }, { blocks: 'on' })
+  await $.session.start({ cwd: '/work/project', surface: 'terminal', isInteractive: true })
+
+  const ui = await mountToolUse($)
+
+  expect(await ui.find({ type: 'Image' })).toBeUndefined()
+  expect(await ui.find({ type: 'Raster' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('keeps the tool row when a picture cannot be decoded for character cells', async ($, on) => {
+  mockSession(on, { TERM_PROGRAM: 'vscode' })
+  await $.session.start({ cwd: '/work/project', surface: 'terminal', isInteractive: true })
+
+  const ui = await $.ui.mount({
+    plugin: 'terminal-image',
+    surface: 'terminal',
+    component: 'ToolUse',
+    viewport: { columns: 80, rows: 30 },
+    props: toolUseProps({
+      output: {
+        type: 'image',
+        file: {
+          base64: 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAAD',
+          type: 'image/png',
+        },
+      },
+    }),
+  })
+
+  expect(await ui.find({ type: 'Raster' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: 'call' })).toBeDefined()
   await ui.unmount()
 })
 
@@ -335,6 +390,30 @@ test('wraps more than a row of tool images without dropping any', async ($, on) 
   const images = await ui.findAll({ type: 'Image' })
   expect(images).toHaveLength(8)
   expect(images.every(image => image.props.columns === 15)).toBe(true)
+  await ui.unmount()
+})
+
+test('keeps character cells within the render tree size budget', async ($, on) => {
+  mockSession(on, { TERM_PROGRAM: 'vscode' })
+  await $.session.start({ cwd: '/work/project', surface: 'terminal', isInteractive: true })
+
+  const ui = await $.ui.mount({
+    plugin: 'terminal-image',
+    surface: 'terminal',
+    component: 'ToolGroup',
+    props: {
+      calls: Array.from({ length: 40 }, (_, index) =>
+        toolUseProps({ tool_use_id: `read-${index}` }),
+      ),
+      isActive: false,
+      isExpanded: false,
+    },
+  })
+
+  const rasters = await ui.findAll({ type: 'Raster' })
+  // 15×8 格 = 1920 字符/张，60,000 字符预算内最多 31 张。
+  expect(rasters).toHaveLength(31)
+  expect(rasters.every(raster => raster.props.columns === 15)).toBe(true)
   await ui.unmount()
 })
 

@@ -42,7 +42,7 @@ Claude Code Mod 集合，提供状态栏、Subagent 实时面板、用户输入�
 | `todo-panel/` | `todo-panel` | 监听 Task 工具（`TaskCreate`/`TaskUpdate`/`TaskList`/`TaskGet`，兼容 `TodoWrite`）成功结果，自动打开独立任务进度 Pane；与 Subagent 面板分离。 |
 | `notification-mod/` | `notification-mod` | 主会话完成或失败时使用 `$.ui.notify` 发送成功/失败通知；主动中断和 Subagent 不通知。 |
 | `project-files/` | `project-files` | 通过 `/project-files` 打开独立文件浏览 Pane，使用 `$.fs` 浏览当前项目目录和预览文件。 |
-| `terminal-image/` | `terminal-image` | 在终端内渲染用户粘贴、助手 Markdown 和工具结果中的 PNG；按终端图形协议能力自动显示或隐藏，不支持时不占位。 |
+| `terminal-image/` | `terminal-image` | 在终端内渲染用户粘贴、助手 Markdown 和工具结果中的 PNG；支持图形协议时用 `<Image>`，否则用 `<Raster>` 半块字符降级。 |
 
 ### 各 Mod 的边界
 
@@ -55,7 +55,7 @@ Claude Code Mod 集合，提供状态栏、Subagent 实时面板、用户输入�
 - `todo-panel` 只观察成功的 Task / TodoWrite 工具结果并渲染独立任务面板，不修改任务数据，不处理 Subagent transcript。
 - `notification-mod` 只观察主会话 `turn.complete` 并调用 `$.ui.notify`；不判断 OS 窗口焦点，不通知 Subagent，不回退 toast。
 - `project-files` 只在当前 session cwd 范围内通过 `$.fs` 浏览和预览文件，不调用外部进程或创建 OS 窗口。
-- `terminal-image` 只观察终端面的 `UserMessage`、`AssistantMessage` 和工具行渲染，插入宿主 `<Image>` 元素；不修改消息内容、工具结果或用例数据，不发起网络请求。
+- `terminal-image` 只观察终端面的 `UserMessage`、`AssistantMessage` 和工具行渲染，插入宿主 `<Image>` 或 `<Raster>` 元素；自带 PNG 解码只读内联字节，不修改消息内容、工具结果或用例数据，不发起网络请求。
 
 ## 环境要求
 
@@ -279,9 +279,9 @@ macOS/Linux 示例：
 
 加载后自动在终端面渲染三类 PNG：用户粘贴的图片附件、助手回复中 Markdown 指向的本地 PNG、工具结果中的内联 PNG 图片块。用户消息和工具结果会在原内容下方追加图片，助手回复追加在该段 Markdown 之后；用户消息中的 `[Image #N]` 占位保留，避免看起来像丢图。图片张数不设上限，单张占满宽度，多张按可用宽度并排，放不下自动换行。
 
-渲染前按环境变量探测终端能力：Kitty、Ghostty、WezTerm 视为支持；VS Code 集成终端、Apple Terminal、Windows Terminal 和 `TERM=dumb` 视为不支持，直接不插入图片、不占位；tmux 与其他未知终端交给宿主 `<Image>` 再次判断。可用 `/terminal-image` 查看当前探测结果，或用 `CC_TERMINAL_IMAGE=on|off` 手动覆盖。
+渲染前按环境变量探测终端能力：Kitty、Ghostty、WezTerm 用宿主 `<Image>` 直接出图；VS Code 集成终端、Apple Terminal、Windows Terminal 和 `TERM=dumb` 默认用 `<Raster>` 半块字符降级（`blocks=off` 可恢复不渲染）；tmux 与其他未知终端交给宿主 `<Image>` 再次判断，也可用 `blocks=on` 强制字符块。可用 `/terminal-image` 查看探测结果与渲染方式，或用 `CC_TERMINAL_IMAGE=on|off` 手动覆盖。
 
-加载 `cc-mods-config` 后，在 `/my-cc-mods-config` 的“图片”页签配置插件开关、终端能力策略、最大列数/行数，以及用户粘贴、助手回复、工具结果三个来源；保存后写入统一配置文件的 `image` 段，功能 Mod 监听成功写入自动刷新。
+加载 `cc-mods-config` 后，在 `/my-cc-mods-config` 的“图片”页签配置插件开关、终端能力策略、字符块降级、最大列数/行数，以及用户粘贴、助手回复、工具结果三个来源；保存后写入统一配置文件的 `image` 段，功能 Mod 监听成功写入自动刷新。
 
 只处理 PNG 本地文件；JPEG、GIF、WebP、SVG、网络图片和数据 URI 不渲染。完整边界见 [terminal-image/README.md](./terminal-image/README.md)。
 

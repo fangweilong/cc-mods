@@ -61,9 +61,12 @@ export type TimestampConfig = {
 
 export type ImageMode = 'auto' | 'on' | 'off'
 
+export type BlocksMode = 'auto' | 'on' | 'off'
+
 export type ImageConfig = {
   enabled: boolean
   mode: ImageMode
+  blocks: BlocksMode
   maxColumns: number
   maxRows: number
   showUserImages: boolean

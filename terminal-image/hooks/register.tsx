@@ -7,8 +7,15 @@ import type {
   RenderNode,
 } from 'claude-code'
 
+import { blockCells, contentKey, resetBlockCache } from './blocks'
 import { DEFAULT_IMAGE_CONFIG, loadImageConfig, type ImageConfig } from './config'
-import { imageSupport, resetImageSupport } from './detect'
+import {
+  blockBackground,
+  imageSupport,
+  resetImageSupport,
+  resolveRenderKind,
+  type RenderKind,
+} from './detect'
 import { extractMarkdownImagePaths } from './markdown'
 import { pngBase64Size, type PngSize } from './png'
 
@@ -26,10 +33,18 @@ const MAX_INLINE_BASE64 = Math.floor((MAX_INLINE_BYTES * 4) / 3) - 4
 const MAX_ATTACHED_TEXTS = 32
 const MAX_FILE_CACHE = 64
 const MAX_MEDIA_SLICES = 8
+/**
+ * 宿主对一棵渲染树的序列化上限是 100,000 字符；`cells` 每格 12 字节
+ * 正好编码成 16 个 base64 字符。给原内容留出余量，超出时缩小或放弃后面的图。
+ */
+const MAX_BLOCK_CHARS = 60_000
+const MIN_BLOCK_CELLS = 64
 
 type Picture = {
   source: ImageSource
   size: PngSize
+  /** 字符块缓存的稳定内容键：文件用路径+mtime+大小，内联图片用内容哈希。 */
+  key: string
 }
 
 type Attachment = {
@@ -55,6 +70,8 @@ let imageConfig: ImageConfig = { ...DEFAULT_IMAGE_CONFIG }
 let configPath = ''
 /** `/terminal-image` 的诊断：最近一次带图片附件的提交读到了几张。 */
 let lastImagePrompt = 'none'
+/** 最近一次字符块渲染成功/尝试的张数。 */
+let lastBlockResult = 'none'
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value))
@@ -208,7 +225,7 @@ function visitForPictures(
     if (data && (mediaType === '' || mediaType.toLowerCase().startsWith('image/png'))) {
       const size = pngBase64Size(data)
       if (size) {
-        pictures.push({ source: { png: data }, size })
+        pictures.push({ source: { png: data }, size, key: contentKey(data) })
         return
       }
     }
@@ -262,7 +279,7 @@ async function readAttachment(
 
   if (!base64) return undefined
   const size = pngBase64Size(base64)
-  return size ? { source: { png: base64 }, size } : undefined
+  return size ? { source: { png: base64 }, size, key: contentKey(base64) } : undefined
 }
 
 async function inTmux($: EngineInterface): Promise<boolean> {
@@ -295,11 +312,12 @@ async function pictureFromFile(
     const size = pngBase64Size(base64)
 
     if (size) {
+      const key = `file:${stat.realPath}:${stat.mtimeMs}:${stat.size}`
       if (base64.length <= MAX_INLINE_BASE64) {
-        picture = { source: { png: base64 }, size }
+        picture = { source: { png: base64 }, size, key }
       } else if (!(await inTmux($))) {
         // tmux 只转发内联字节，读不到文件本身；超过字节上限时跳过。
-        picture = { source: { file: stat.realPath, format: 'png' }, size }
+        picture = { source: { file: stat.realPath, format: 'png' }, size, key }
       }
     }
   } catch {
@@ -311,13 +329,16 @@ async function pictureFromFile(
   return picture
 }
 
-function withPictures(
+async function withPictures(
   $: EngineInterface,
   e: TerminalRender,
   original: RenderNode,
   pictures: Picture[],
-): RenderNode {
-  const { Box, Image } = $.ui.resolve(e)
+  kind: RenderKind,
+): Promise<RenderNode> {
+  if (kind === 'none' || pictures.length === 0) return original
+
+  const { Box, Image, Raster } = $.ui.resolve(e)
   const columns = e.viewport?.columns ?? 80
   const layouts = layoutPictures(
     pictures.map(picture => picture.size),
@@ -326,15 +347,60 @@ function withPictures(
     imageConfig.maxRows,
   )
 
-  const images = pictures.map((picture, index) => (
-    <Image
-      key={`${PLUGIN}-${index}`}
-      source={picture.source}
-      columns={layouts[index].columns}
-      rows={layouts[index].rows}
-      alt=" "
-    />
-  ))
+  let nodes: RenderNode[]
+  if (kind === 'blocks') {
+    // 旧宿主可能还没有 Raster；缺省时保持原样。
+    if (!Raster) return original
+    const background = await blockBackground($)
+    nodes = []
+    let remainingChars = MAX_BLOCK_CHARS
+    for (let index = 0; index < pictures.length; index += 1) {
+      const picture = pictures[index]!
+      // 文件源只交给宿主读取，插件拿不到字节，无法做字符块。
+      if (!('png' in picture.source)) continue
+
+      const layout = layouts[index]!
+      let columns = layout.columns
+      let rows = layout.rows
+      const budgetCells = Math.floor(remainingChars / 16)
+      if (columns * rows > budgetCells) {
+        if (budgetCells < MIN_BLOCK_CELLS) break
+        const scale = Math.sqrt(budgetCells / (columns * rows))
+        columns = Math.max(1, Math.floor(columns * scale))
+        rows = Math.max(1, Math.floor(rows * scale))
+        while (columns * rows > budgetCells && rows > 1) rows -= 1
+        while (columns * rows > budgetCells && columns > 1) columns -= 1
+      }
+      if (columns * rows > budgetCells) break
+
+      try {
+        const cells = blockCells(picture.source.png, picture.key, columns, rows, background)
+        nodes.push(
+          <Raster
+            key={`${PLUGIN}-blocks-${index}`}
+            columns={columns}
+            rows={rows}
+            cells={cells}
+          />,
+        )
+        remainingChars -= columns * rows * 16
+      } catch {
+        // 单张图片解码失败不影响其余内容和消息本身。
+      }
+    }
+    lastBlockResult = `${nodes.length}/${pictures.length} blocks`
+    if (nodes.length === 0) return original
+  } else {
+    nodes = pictures.map((picture, index) => (
+      <Image
+        key={`${PLUGIN}-${index}`}
+        source={picture.source}
+        columns={layouts[index]!.columns}
+        rows={layouts[index]!.rows}
+        alt=" "
+      />
+    ))
+  }
 
   const perRow = picturesPerRow(
     pictures.length,
@@ -342,14 +408,14 @@ function withPictures(
     imageConfig.maxColumns,
   )
   const rows: RenderNode[] = []
-  for (let start = 0; start < images.length; start += perRow) {
+  for (let start = 0; start < nodes.length; start += perRow) {
     rows.push(
       <Box
         key={`${PLUGIN}-row-${start}`}
         flexDirection="row"
         gap={PICTURE_GAP}
       >
-        {images.slice(start, start + perRow)}
+        {nodes.slice(start, start + perRow)}
       </Box>,
     )
   }
@@ -368,7 +434,9 @@ export const register: Register = on => {
     cachedTmux = undefined
     fileCache.clear()
     attachedPictures.clear()
+    resetBlockCache()
     lastImagePrompt = 'none'
+    lastBlockResult = 'none'
 
     const loaded = await loadImageConfig($)
     imageConfig = loaded.config
@@ -384,8 +452,9 @@ export const register: Register = on => {
 
   on('command.run', { command: 'terminal-image' }, async $ => {
     const support = await imageSupport($, imageConfig.mode)
+    const kind = await resolveRenderKind($, support, imageConfig)
     return {
-      text: `${PLUGIN}: ${support} · mode=${imageConfig.mode} · max ${imageConfig.maxColumns}x${imageConfig.maxRows} · last prompt: ${lastImagePrompt}`,
+      text: `${PLUGIN}: ${support} · mode=${imageConfig.mode} · blocks=${imageConfig.blocks} → ${kind} · max ${imageConfig.maxColumns}x${imageConfig.maxRows} · last prompt: ${lastImagePrompt} · last blocks: ${lastBlockResult}`,
     }
   })
 
@@ -400,6 +469,7 @@ export const register: Register = on => {
       imageConfig = loaded.config
       configPath = loaded.path
       resetImageSupport()
+      resetBlockCache()
       cachedTmux = undefined
       $.ui.invalidate('ui.render')
     }
@@ -441,22 +511,22 @@ export const register: Register = on => {
     // 提交文本与消息文本可能只有一方带占位，两种形态都查；占位本身保留显示。
     const pictures =
       attachedPictures.get(keyOf(e.props.text)) ?? attachedPictures.get(keyOf(text))
-    if (
-      !pictures?.length ||
-      (await imageSupport($, imageConfig.mode)) === 'unsupported'
-    ) {
-      return next(e)
-    }
+    if (!pictures?.length) return next(e)
+
+    const kind = await resolveRenderKind($, await imageSupport($, imageConfig.mode), imageConfig)
+    if (kind === 'none') return next(e)
 
     const original = await next(e)
-    return withPictures($, e, original, pictures)
+    return withPictures($, e, original, pictures, kind)
   })
 
   on('ui.render', { component: 'AssistantMessage' }, async ($, e, next) => {
     if (e.surface !== 'terminal' || e.props.isSummary) return next(e)
     if (!imageConfig.enabled || !imageConfig.showAssistantImages) return next(e)
     if (!e.props.text.includes('](')) return next(e)
-    if ((await imageSupport($, imageConfig.mode)) === 'unsupported') return next(e)
+
+    const kind = await resolveRenderKind($, await imageSupport($, imageConfig.mode), imageConfig)
+    if (kind === 'none') return next(e)
 
     const paths = extractMarkdownImagePaths(e.props.text)
     if (paths.length === 0) return next(e)
@@ -468,20 +538,22 @@ export const register: Register = on => {
     if (pictures.length === 0) return next(e)
 
     const original = await next(e)
-    return withPictures($, e, original, pictures)
+    return withPictures($, e, original, pictures, kind)
   })
 
   // 独立行或展开组里的单次调用：ToolUse 带着结果，在这里挂图片。
   on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
     if (e.surface !== 'terminal' || e.props.isRunning || e.props.isErrored) return next(e)
     if (!imageConfig.enabled || !imageConfig.showToolImages) return next(e)
-    if ((await imageSupport($, imageConfig.mode)) === 'unsupported') return next(e)
+
+    const kind = await resolveRenderKind($, await imageSupport($, imageConfig.mode), imageConfig)
+    if (kind === 'none') return next(e)
 
     const pictures = collectInlinePictures(e.props.output)
     if (pictures.length === 0) return next(e)
 
     const original = await next(e)
-    return withPictures($, e, original, pictures)
+    return withPictures($, e, original, pictures, kind)
   })
 
   // 折叠组只画一行，组内调用不各自渲染；在组下方直接显示其中的图片。
@@ -489,7 +561,9 @@ export const register: Register = on => {
   on('ui.render', { component: 'ToolGroup' }, async ($, e, next) => {
     if (e.surface !== 'terminal' || e.props.isExpanded) return next(e)
     if (!imageConfig.enabled || !imageConfig.showToolImages) return next(e)
-    if ((await imageSupport($, imageConfig.mode)) === 'unsupported') return next(e)
+
+    const kind = await resolveRenderKind($, await imageSupport($, imageConfig.mode), imageConfig)
+    if (kind === 'none') return next(e)
 
     const pictures: Picture[] = []
     for (const call of e.props.calls) {
@@ -498,6 +572,6 @@ export const register: Register = on => {
     if (pictures.length === 0) return next(e)
 
     const original = await next(e)
-    return withPictures($, e, original, pictures)
+    return withPictures($, e, original, pictures, kind)
   })
 }

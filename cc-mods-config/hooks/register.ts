@@ -1,6 +1,6 @@
 import { atom, read, update } from 'claude-code'
 import type { ConfigRow, EngineInterface, Register } from 'claude-code'
-import type { ImageConfig, ImageMode, I18nConfigDraft, StatuslineConfig, StatuslineDisplayMode, StatuslineModule, StatuslinePosition, TimestampConfig, TurnDurationConfigDraft } from '../types'
+import type { BlocksMode, ImageConfig, ImageMode, I18nConfigDraft, StatuslineConfig, StatuslineDisplayMode, StatuslineModule, StatuslinePosition, TimestampConfig, TurnDurationConfigDraft } from '../types'
 
 const UI_COLORS = { cyan: '#50c8ff', red: '#ff5a64', gray: '#8791a0' } as const
 
@@ -70,6 +70,7 @@ export const DEFAULT_CONFIG: StatusConfig = {
   image: {
     enabled: true,
     mode: 'auto',
+    blocks: 'auto',
     maxColumns: 48,
     maxRows: 16,
     showUserImages: true,
@@ -193,6 +194,9 @@ export function normalizeConfig(value: unknown): StatusConfig {
     if (typeof image.enabled === 'boolean') result.image.enabled = image.enabled
     if (image.mode === 'auto' || image.mode === 'on' || image.mode === 'off') {
       result.image.mode = image.mode
+    }
+    if (image.blocks === 'auto' || image.blocks === 'on' || image.blocks === 'off') {
+      result.image.blocks = image.blocks
     }
     if (typeof image.maxColumns === 'number' && Number.isInteger(image.maxColumns)) {
       result.image.maxColumns = Math.min(255, Math.max(1, image.maxColumns))
@@ -699,7 +703,7 @@ async function renderConfigPane($: EngineInterface, e: any): Promise<any> {
     marginTop: 1,
     children: [
       Text({ key: 'terminal-image-config-heading', color: UI_COLORS.cyan, weight: 'bold', children: [language === 'zh' ? 'terminal-image · 终端图片' : 'terminal-image · Terminal images'] }),
-      Text({ color: UI_COLORS.gray, children: [language === 'zh' ? '在支持图片协议的终端渲染 PNG；不支持时不占位。' : 'Render PNGs where the terminal supports images; nothing is drawn otherwise.'] }),
+      Text({ color: UI_COLORS.gray, children: [language === 'zh' ? '在支持图片协议的终端渲染 PNG；不支持的终端可用字符块降级。' : 'Render PNGs where the terminal supports images; other terminals can fall back to character blocks.'] }),
       Box({ children: [
         Text({ color: UI_COLORS.gray, children: [language === 'zh' ? '插件状态：' : 'Plugin: '] }),
         Button({
@@ -718,6 +722,17 @@ async function renderConfigPane($: EngineInterface, e: any): Promise<any> {
           { value: 'off', label: language === 'zh' ? '总是不显示' : 'Never show' },
         ],
         onSelect: (value: ImageMode) => changeConfig($, latest => ({ ...latest, image: { ...latest.image, mode: value } })),
+      }),
+      Select({
+        key: 'terminal-image-blocks',
+        label: language === 'zh' ? '无图形协议时' : 'Without graphics',
+        value: current.image.blocks,
+        options: [
+          { value: 'auto', label: language === 'zh' ? '字符块降级' : 'Block fallback' },
+          { value: 'on', label: language === 'zh' ? '总是字符块' : 'Always blocks' },
+          { value: 'off', label: language === 'zh' ? '不降级' : 'No fallback' },
+        ],
+        onSelect: (value: BlocksMode) => changeConfig($, latest => ({ ...latest, image: { ...latest.image, blocks: value } })),
       }),
       Input({
         key: 'terminal-image-max-columns',

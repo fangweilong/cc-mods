@@ -8,9 +8,13 @@ import type { EngineInterface } from 'claude-code'
  */
 export type ImageMode = 'auto' | 'on' | 'off'
 
+/** 无图形协议时的字符块降级策略；`auto` 只对明确不支持的终端生效。 */
+export type BlocksMode = 'auto' | 'on' | 'off'
+
 export type ImageConfig = {
   enabled: boolean
   mode: ImageMode
+  blocks: BlocksMode
   maxColumns: number
   maxRows: number
   showUserImages: boolean
@@ -21,6 +25,7 @@ export type ImageConfig = {
 export const DEFAULT_IMAGE_CONFIG: ImageConfig = {
   enabled: true,
   mode: 'auto',
+  blocks: 'auto',
   maxColumns: 48,
   maxRows: 16,
   showUserImages: true,
@@ -45,6 +50,9 @@ export function normalizeImageConfig(value: unknown): ImageConfig {
   if (typeof data.enabled === 'boolean') result.enabled = data.enabled
   if (data.mode === 'auto' || data.mode === 'on' || data.mode === 'off') {
     result.mode = data.mode
+  }
+  if (data.blocks === 'auto' || data.blocks === 'on' || data.blocks === 'off') {
+    result.blocks = data.blocks
   }
   result.maxColumns = clampDimension(data.maxColumns, result.maxColumns)
   result.maxRows = clampDimension(data.maxRows, result.maxRows)

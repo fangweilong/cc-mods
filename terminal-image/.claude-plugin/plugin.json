@@ -4,5 +4,5 @@
   "author": {
     "name": "fangweilong"
   },
-  "description": "Render PNG images in the terminal where its graphics protocol supports them, and hide them elsewhere."
+  "description": "Render PNG images in the terminal with the host graphics element where supported, and fall back to character-block cells elsewhere."
 }
