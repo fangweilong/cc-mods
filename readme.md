@@ -279,6 +279,8 @@ macOS/Linux 示例：
 
 加载后自动在终端面渲染三类 PNG：用户粘贴的图片附件、助手回复中 Markdown 指向的本地 PNG、工具结果中的内联 PNG 图片块。用户消息和工具结果会在原内容下方追加图片，助手回复追加在该段 Markdown 之后；用户消息中的 `[Image #N]` 占位保留，避免看起来像丢图。图片张数不设上限，单张占满宽度，多张按可用宽度并排，放不下自动换行。
 
+用户粘贴图片的字节只缓存在本会话内存中，不写入磁盘。恢复会话（`--resume`）后，历史用户消息中的粘贴图片不会再显示，只保留 `[Image #N]` 占位；本次会话内新提交的图片正常显示。助手 Markdown 与工具结果图片不受影响，它们每次从文件或工具结果重新读取。
+
 渲染前按环境变量探测终端能力：Kitty、Ghostty、WezTerm 用宿主 `<Image>` 直接出图；VS Code 集成终端、Apple Terminal、Windows Terminal 和 `TERM=dumb` 默认用 `<Raster>` 半块字符降级（`blocks=off` 可恢复不渲染）；tmux 与其他未知终端交给宿主 `<Image>` 再次判断，也可用 `blocks=on` 强制字符块。可用 `/terminal-image` 查看探测结果与渲染方式，或用 `CC_TERMINAL_IMAGE=on|off` 手动覆盖。
 
 加载 `cc-mods-config` 后，在 `/my-cc-mods-config` 的“图片”页签配置插件开关、终端能力策略、字符块降级、最大列数/行数，以及用户粘贴、助手回复、工具结果三个来源；保存后写入统一配置文件的 `image` 段，功能 Mod 监听成功写入自动刷新。
