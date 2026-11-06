@@ -22,7 +22,7 @@ claude --plugin-dir "./cc-mods-config" --plugin-dir "./user-prompt-frame"
 
 运行 `/my-cc-mods-config` 会打开统一可视化配置面板，这是唯一的配置面板命令入口。面板使用 Tabs 分组，点击顶部 Tab 切换当前配置区域；保存/关闭操作始终固定在底部：
 
-- **Statusline / 状态栏**：使用 `Select` 选择面板语言、状态栏位置和显示模式；使用按钮启用/停用整个状态栏以及各模块、调整模块顺序。状态栏总开关对应 `enabled`（默认 `true`），停用后不再绘制状态栏并把原生模式提示与输入框提示交还宿主。细粒度模块包括回合步骤 `turn_step`、回合结束原因 `turn_reason`、本回合工具次数 `tool_count`，默认关闭以避免状态栏过长
+- **Statusline / 状态栏**：使用 `Select` 选择状态栏自身语言、状态栏位置和显示模式；使用按钮启用/停用整个状态栏以及各模块、调整模块顺序。状态栏总开关对应 `enabled`（默认 `true`），停用后不再绘制状态栏并把原生模式提示与输入框提示交还宿主。细粒度模块包括回合步骤 `turn_step`、回合结束原因 `turn_reason`、本回合工具次数 `tool_count`，默认关闭以避免状态栏过长
 - **Prompt frame / 输入框**：使用 `Input` 编辑用户输入框标题、颜色和边框符号
 - **Images / 图片**：启用/停用 `terminal-image`，选择终端能力策略（自动探测 / 总是尝试 / 总是不显示）与字符块降级策略（自动 / 总是 / 关闭），设置图片最大列数与行数，并分别控制用户粘贴、助手回复和工具结果三个来源
 - **Language & time / 语言与时间**：使用 `Input` / `Select` 配置 i18n 语言代码或 JSON 路径、时间格式，以及重新加载或取消语言修改；使用独立按钮切换时间显示、TPS / Token 与“自动展开工具组”（默认关闭，保留原生工具组折叠）
@@ -34,7 +34,7 @@ claude --plugin-dir "./cc-mods-config" --plugin-dir "./user-prompt-frame"
 
 修改后点击 `Save configuration` / 保存配置统一提交；`Close` 不保存未提交的草稿。i18n 需同时加载 `i18n-mod`，没有加载时提示不可用，宿主策略锁定时仅显示只读来源。
 
-状态栏/面板的 `en` / `zh` 与 i18n 原生界面语言是两个独立设置。后者通过 `$.config.set` 保存宿主的 `i18n-mod.language`，继续由 i18n 校验文件与执行语言切换，不复制到状态栏 JSON 配置。
+面板语言（`panelLanguage`）与状态栏语言（`language`）是两个独立设置：面板语言放在 Tab 之外的全局位置，控制整个配置面板的文案；状态栏语言只控制 `<状态栏>` 内容。二者与 i18n 原生界面语言也相互独立：i18n 通过 `$.config.set` 保存宿主的 `i18n-mod.language`，继续由 i18n 校验文件与执行语言切换，不复制到状态栏 JSON 配置，也不影响面板文案。
 
 保存先提交 i18n；坏文件或策略拒绝会显示错误并保留语言草稿，其他 Mod 的配置文件不写入。两个存储不是原子事务：若 i18n 已提交但状态栏/输入框文件保存失败，会明确提示部分保存失败，重试不会重复提交已保存的语言草稿。重载只读取已保存的语言包；先保存或取消未提交的语言修改。
 
@@ -42,7 +42,7 @@ Subagent 面板当前没有可调配置。后续新增可调项也应统一接�
 
 ## 存储与职责
 
-- 状态栏与输入框继续使用 `~/.config/my-cc-mods/config.json`，保留 `language`、`order`、`modules`、`promptFrame` 格式，新增 `enabled`（状态栏总开关，默认 `true`，缺失时视为启用）、`position`（`session-mode` / `below-prompt`）与 `displayMode`（`full` / `compact`）；`modules` 兼容新增 `turn_step`、`turn_reason`、`tool_count`，三者默认关闭；时间显示使用 `timestamp.enabled`、`timestamp.format` 与 `timestamp.tps`，工具组自动展开使用独立 boolean `timestamp.autoExpandToolGroups`（默认 `false`）；终端图片使用 `image.enabled`、`image.mode`（`auto` / `on` / `off`）、`image.blocks`（`auto` / `on` / `off`）、`image.maxColumns`、`image.maxRows`、`image.showUserImages`、`image.showAssistantImages`、`image.showToolImages`，缺省为启用、自动探测、不支持时字符块降级、48×16 且三个来源全部开启；旧配置缺少位置字段时沿用现有位置，缺少显示模式或值无效时使用简洁模式（`compact`），缺少时间配置时启用 `HH:mm:ss`，缺少自动展开字段或值不是 boolean 时保留原生工具组折叠，无需迁移。
+- 状态栏与输入框继续使用 `~/.config/my-cc-mods/config.json`，保留 `language`、`order`、`modules`、`promptFrame` 格式，新增面板语言 `panelLanguage`（`en` / `zh`，默认 `en`；旧配置缺失时沿用 `language`）、`enabled`（状态栏总开关，默认 `true`，缺失时视为启用）、`position`（`session-mode` / `below-prompt`）与 `displayMode`（`full` / `compact`）；`modules` 兼容新增 `turn_step`、`turn_reason`、`tool_count`，三者默认关闭；时间显示使用 `timestamp.enabled`、`timestamp.format` 与 `timestamp.tps`，工具组自动展开使用独立 boolean `timestamp.autoExpandToolGroups`（默认 `false`）；终端图片使用 `image.enabled`、`image.mode`（`auto` / `on` / `off`）、`image.blocks`（`auto` / `on` / `off`）、`image.maxColumns`、`image.maxRows`、`image.showUserImages`、`image.showAssistantImages`、`image.showToolImages`，缺省为启用、自动探测、不支持时字符块降级、48×16 且三个来源全部开启；旧配置缺少位置字段时沿用现有位置，缺少显示模式或值无效时使用简洁模式（`compact`），缺少时间配置时启用 `HH:mm:ss`，缺少自动展开字段或值不是 boolean 时保留原生工具组折叠，无需迁移。
 - i18n 继续通过宿主 `userConfig` 保存 `i18n-mod.language`，不直接写 `settings.json`，也不向上述 JSON 复制语言来源。
 - 面板的草稿与错误状态归属 `cc-mods-config`，不访问其他 Mod 的 `$.state`。
 - 不绘制状态栏、不隐藏原生快捷提示、不订阅模型或 Agent 的运行事件。
@@ -60,7 +60,7 @@ claude plugin validate ./cc-mods-config
 claude plugin test ./cc-mods-config
 ```
 
-测试覆盖 terminal/desktop 面板、Tabs 切换与当前 Tab 内容隔离、中英文 Mod 标题、原生 Select/Input 控件、状态栏位置和完整/简洁模式选择/保存/重新打开及旧配置默认值、模式无效值回退、自动展开工具组的独立开关与默认原生折叠、终端图片设置规范化与保存、严格 boolean 规范化、保存/重新打开/取消及失败重试、唯一命令注册与已移除入口不再打开面板、无功能 Mod 时独立保存、兼容文件读取、草稿取消、i18n 校验和锁定策略、部分保存失败与重试。
+测试覆盖 terminal/desktop 面板、面板语言与状态栏语言独立、Tabs 切换与当前 Tab 内容隔离、中英文 Mod 标题、原生 Select/Input 控件、状态栏位置和完整/简洁模式选择/保存/重新打开及旧配置默认值、模式无效值回退、自动展开工具组的独立开关与默认原生折叠、终端图片设置规范化与保存、严格 boolean 规范化、保存/重新打开/取消及失败重试、唯一命令注册与已移除入口不再打开面板、无功能 Mod 时独立保存、兼容文件读取、草稿取消、i18n 校验和锁定策略、部分保存失败与重试。
 
 类型声明由 Claude Code 在加载后生成到 `.claude-plugin/types/`，无需安装 npm 依赖。
 

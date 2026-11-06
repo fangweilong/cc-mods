@@ -105,7 +105,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
   for (const language of ['en', 'zh'] as const) {
     test(`separates mod configuration sections in ${language} on ${surface}`, async ($, on) => {
       const world = mockConfig(on)
-      world.file = JSON.stringify({ ...DEFAULT_CONFIG, language })
+      world.file = JSON.stringify({ ...DEFAULT_CONFIG, language, panelLanguage: language })
       await openConfig($)
       const ui = await mountConfig($, surface)
       const tabs = [
@@ -128,6 +128,8 @@ for (const surface of ['terminal', 'desktop'] as const) {
       expect((await ui.find({ key: 'config-tabs' }))?.props.flexDirection).toBe('row')
       expect((await ui.find({ key: 'config-actions' }))?.props.marginTop).toBe(1)
       expect((await ui.find({ key: 'panel-language' }))?.type).toBe('Select')
+      expect((await ui.find({ key: 'statusline-language' }))?.props.value).toBe(language)
+      expect((await ui.find({ key: 'panel-language' }))?.props.value).toBe(language)
       expect((await ui.find({ key: 'statusline-enabled-toggle' }))?.text).toBe(language === 'zh' ? '启用' : 'ON')
       const position = await ui.find({ key: 'statusline-position' })
       expect(position?.type).toBe('Select')
@@ -301,6 +303,16 @@ test('normalizes statusline positions independently and defaults legacy files to
   }
 })
 
+test('normalizes the panel language independently from the statusline language', () => {
+  expect(DEFAULT_CONFIG.panelLanguage).toBe('en')
+  expect(normalizeConfig({ language: 'en', panelLanguage: 'zh' })).toMatchObject({ language: 'en', panelLanguage: 'zh' })
+  expect(normalizeConfig({ language: 'zh', panelLanguage: 'en' })).toMatchObject({ language: 'zh', panelLanguage: 'en' })
+  // 旧配置没有 panelLanguage 时沿用 language，升级后不会突然切换面板语言。
+  expect(normalizeConfig({ language: 'zh' }).panelLanguage).toBe('zh')
+  expect(normalizeConfig({ panelLanguage: 'zh' }).panelLanguage).toBe('zh')
+  expect(normalizeConfig({ panelLanguage: 'fr' }).panelLanguage).toBe('en')
+})
+
 test('normalizes the statusline plugin switch independently and defaults legacy files to enabled', () => {
   expect(DEFAULT_CONFIG.enabled).toBe(true)
   expect(normalizeConfig({ enabled: false }).enabled).toBe(false)
@@ -326,7 +338,8 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await ui.press({ key: 'save-config' })
     const saved = JSON.parse(world.writes[0]!)
     expect(saved.position).toBe('below-prompt')
-    expect(saved.language).toBe('zh')
+    expect(saved.language).toBe('en')
+    expect(saved.panelLanguage).toBe('zh')
     expect(saved.promptFrame.title).toBe('保留输入框配置')
     await ui.unmount()
     await openConfig($)
@@ -393,7 +406,8 @@ for (const surface of ['terminal', 'desktop'] as const) {
     const saved = JSON.parse(world.writes[0]!)
     expect(saved.displayMode).toBe('full')
     expect(saved.position).toBe('below-prompt')
-    expect(saved.language).toBe('zh')
+    expect(saved.language).toBe('en')
+    expect(saved.panelLanguage).toBe('zh')
     expect(saved.modules.context).toBe(false)
     expect(saved.promptFrame.title).toBe('既有输入框')
     expect(saved.order).toEqual(DEFAULT_CONFIG.order)
@@ -679,7 +693,8 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await ui.press({ key: 'save-config' })
     const saved = JSON.parse(world.writes[0]!)
     expect(saved.promptFrame.title).toBe('独立配置')
-    expect(saved.language).toBe('zh')
+    expect(saved.language).toBe('en')
+    expect(saved.panelLanguage).toBe('zh')
     expect(saved.modules.context).toBe(false)
     expect(saved.order.slice(9, 11)).toEqual(['cwd', 'cost'])
     expect(world.paths.map(path => path.replace(/\\/gu, '/').replace(/^D:/u, ''))).toEqual(['/test-home/.config/my-cc-mods/config.json'])
@@ -804,7 +819,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
   for (const language of ['en', 'zh'] as const) {
     test(`stages duration controls from actual rows and saves through the host in ${language} on ${surface}`, async ($, on) => {
       const world = mockConfig(on)
-      world.file = JSON.stringify({ ...DEFAULT_CONFIG, language })
+      world.file = JSON.stringify({ ...DEFAULT_CONFIG, language, panelLanguage: language })
       world.source = 'en'
       await openConfig($)
       const ui = await mountConfig($, surface)

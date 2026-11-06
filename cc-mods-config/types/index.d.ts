@@ -38,6 +38,11 @@ export type StatuslineConfig = {
   promptFrame: PromptFrameConfig
 }
 
+/** 配置面板自身的语言；与 statusline 的 `language` 相互独立。 */
+export type PanelConfig = {
+  panelLanguage: 'en' | 'zh'
+}
+
 export type I18nConfigDraft = {
   source: string | null
   error: string
@@ -77,7 +82,7 @@ export type ImageConfig = {
 declare module 'claude-code' {
   interface PluginState {
     'cc-mods-config': {
-      config: StatuslineConfig & { timestamp: TimestampConfig; image: ImageConfig }
+      config: StatuslineConfig & PanelConfig & { timestamp: TimestampConfig; image: ImageConfig }
       i18nDraft: I18nConfigDraft
       turnDurationDraft: TurnDurationConfigDraft
     }

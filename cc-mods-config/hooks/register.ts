@@ -1,6 +1,6 @@
 import { atom, read, update } from 'claude-code'
 import type { ConfigRow, EngineInterface, Register } from 'claude-code'
-import type { BlocksMode, ImageConfig, ImageMode, I18nConfigDraft, StatuslineConfig, StatuslineDisplayMode, StatuslineModule, StatuslinePosition, TimestampConfig, TurnDurationConfigDraft } from '../types'
+import type { BlocksMode, ImageConfig, ImageMode, I18nConfigDraft, PanelConfig, StatuslineConfig, StatuslineDisplayMode, StatuslineModule, StatuslinePosition, TimestampConfig, TurnDurationConfigDraft } from '../types'
 
 const UI_COLORS = { cyan: '#50c8ff', red: '#ff5a64', gray: '#8791a0' } as const
 
@@ -24,7 +24,7 @@ const DEFAULT_ORDER = [
 export type ModuleId = StatuslineModule
 export type Language = 'en' | 'zh'
 
-export type StatusConfig = StatuslineConfig & {
+export type StatusConfig = StatuslineConfig & PanelConfig & {
   timestamp: TimestampConfig
   image: ImageConfig
 }
@@ -34,6 +34,7 @@ export const DEFAULT_CONFIG: StatusConfig = {
   position: 'session-mode',
   displayMode: 'compact',
   language: 'en',
+  panelLanguage: 'en',
   order: [...DEFAULT_ORDER],
   modules: {
     model: true,
@@ -100,6 +101,7 @@ function cloneConfig(value: StatusConfig): StatusConfig {
     position: value.position,
     displayMode: value.displayMode,
     language: value.language,
+    panelLanguage: value.panelLanguage,
     order: [...value.order],
     modules: { ...value.modules },
     promptFrame: { ...value.promptFrame },
@@ -117,6 +119,7 @@ export function normalizeConfig(value: unknown): StatusConfig {
     position?: unknown
     displayMode?: unknown
     language?: unknown
+    panelLanguage?: unknown
     order?: unknown
     modules?: unknown
     promptFrame?: unknown
@@ -138,6 +141,13 @@ export function normalizeConfig(value: unknown): StatusConfig {
 
   if (data.language === 'en' || data.language === 'zh') {
     result.language = data.language
+  }
+
+  // 旧配置没有独立的面板语言；沿用原 language 的行为，避免升级后面板突然变英文。
+  if (data.panelLanguage === 'en' || data.panelLanguage === 'zh') {
+    result.panelLanguage = data.panelLanguage
+  } else if (data.language === 'en' || data.language === 'zh') {
+    result.panelLanguage = data.language
   }
 
   if (Array.isArray(data.order) && data.order.length > 0) {
@@ -321,8 +331,8 @@ async function saveCurrentConfig($: EngineInterface): Promise<void> {
       const reason = error instanceof Error ? error.message : String(error)
       const failure = `${key}: ${reason}`
       const message = savedKeys.length > 0
-        ? partialSaveMessage(savedConfig.language, savedKeys, failure)
-        : (savedConfig.language === 'zh' ? `${failure}；保存失败，草稿已保留。` : `${failure}; save failed, drafts preserved.`)
+        ? partialSaveMessage(savedConfig.panelLanguage, savedKeys, failure)
+        : (savedConfig.panelLanguage === 'zh' ? `${failure}；保存失败，草稿已保留。` : `${failure}; save failed, drafts preserved.`)
       await update($, turnDurationDraftAtom, draft => ({ ...draft, error: message }))
       $.ui.toast(message)
       return
@@ -334,20 +344,20 @@ async function saveCurrentConfig($: EngineInterface): Promise<void> {
     config = savedConfig
     draftConfig = undefined
     await update($, configAtom, () => cloneConfig(config))
-    $.ui.toast(config.language === 'zh' ? '配置已保存。' : 'Configuration saved.')
+    $.ui.toast(config.panelLanguage === 'zh' ? '配置已保存。' : 'Configuration saved.')
   } catch {
     $.ui.toast(savedKeys.some(key => key !== 'i18n-mod.language')
-      ? partialSaveMessage(savedConfig.language, savedKeys, savedConfig.language === 'zh' ? '状态栏/输入框配置保存失败' : 'statusline/prompt-frame save failed')
+      ? partialSaveMessage(savedConfig.panelLanguage, savedKeys, savedConfig.panelLanguage === 'zh' ? '状态栏/输入框配置保存失败' : 'statusline/prompt-frame save failed')
       : savedKeys.length > 0
-        ? (savedConfig.language === 'zh' ? 'i18n 已保存，但状态栏/输入框配置保存失败，请重试。' : 'i18n saved, but statusline/prompt-frame save failed; retry saving.')
-        : (savedConfig.language === 'zh' ? '配置保存失败，草稿已保留。' : 'Configuration save failed; draft preserved.'))
+        ? (savedConfig.panelLanguage === 'zh' ? 'i18n 已保存，但状态栏/输入框配置保存失败，请重试。' : 'i18n saved, but statusline/prompt-frame save failed; retry saving.')
+        : (savedConfig.panelLanguage === 'zh' ? '配置保存失败，草稿已保留。' : 'Configuration save failed; draft preserved.'))
   }
 }
 
 async function reloadI18n($: EngineInterface): Promise<void> {
   const draft = await read($, i18nDraftAtom)
   if (draft.source !== null) {
-    $.ui.toast(config.language === 'zh' ? '请先保存或取消 i18n 草稿，再重新加载。' : 'Save or discard the i18n draft before reloading.')
+    $.ui.toast(config.panelLanguage === 'zh' ? '请先保存或取消 i18n 草稿，再重新加载。' : 'Save or discard the i18n draft before reloading.')
     return
   }
   try {
@@ -403,7 +413,8 @@ async function renderConfigPane($: EngineInterface, e: any): Promise<any> {
   const current = draftConfig ?? cloneConfig(stateConfig ?? DEFAULT_CONFIG)
   if (!draftConfig) draftConfig = cloneConfig(current)
   const { Box, Button, Input, Select, Text } = $.ui.resolve(e)
-  const language = current.language
+  // 面板自身文案只跟 panelLanguage；statusline 的 language 仅控制状态栏内容。
+  const language = current.panelLanguage
   const title = language === 'zh' ? 'CC Mods 配置' : 'CC Mods Configuration'
   const enabled = language === 'zh' ? '启用' : 'ON'
   const disabled = language === 'zh' ? '停用' : 'OFF'
@@ -564,10 +575,10 @@ async function renderConfigPane($: EngineInterface, e: any): Promise<any> {
     marginTop: 1,
     children: [
       Text({ key: 'statusline-config-heading', color: UI_COLORS.cyan, weight: 'bold', children: [language === 'zh' ? 'statusline-mod · 状态栏' : 'statusline-mod · Statusline'] }),
-      Text({ color: UI_COLORS.gray, children: [language === 'zh' ? '状态栏与配置面板语言' : 'Statusline and panel language'] }),
+      Text({ color: UI_COLORS.gray, children: [language === 'zh' ? '状态栏自身的语言' : 'Statusline language'] }),
       Select({
-        key: 'panel-language',
-        label: language === 'zh' ? '配置面板语言' : 'Panel language',
+        key: 'statusline-language',
+        label: language === 'zh' ? '状态栏语言' : 'Statusline language',
         value: current.language,
         options: [{ value: 'en', label: 'English' }, { value: 'zh', label: '简体中文' }],
         onSelect: (value: Language) => changeConfig($, latest => ({ ...latest, language: value })),
@@ -785,6 +796,14 @@ async function renderConfigPane($: EngineInterface, e: any): Promise<any> {
     flexDirection: 'column',
     children: [
       Text({ color: UI_COLORS.cyan, weight: 'bold', children: [title] }),
+      // 面板语言跨 Tab 生效，放在 Tab 之外，避免被误当成状态栏设置。
+      Select({
+        key: 'panel-language',
+        label: language === 'zh' ? '面板语言' : 'Panel language',
+        value: current.panelLanguage,
+        options: [{ value: 'en', label: 'English' }, { value: 'zh', label: '简体中文' }],
+        onSelect: (value: Language) => changeConfig($, latest => ({ ...latest, panelLanguage: value })),
+      }),
       Box({ key: 'config-tabs', flexDirection: 'row', gap: 1, children: tabButtons }),
       Text({ color: UI_COLORS.gray, children: [configTabLabel(activeTab, language)] }),
       tabContent,
@@ -839,7 +858,7 @@ export const register: Register = on => {
     await syncConfigState($)
     await resetI18nDraft($)
     await resetTurnDurationDraft($)
-    await $.ui.open({ id: CONFIG_PANE, title: 'CC Mods Config', focus: true, closeOnEscape: true })
+    await $.ui.open({ id: CONFIG_PANE, title: config.panelLanguage === 'zh' ? 'CC Mods 配置' : 'CC Mods Config', focus: true, closeOnEscape: true })
     return { text: 'CC Mods configuration panel opened.' }
   })
 }
