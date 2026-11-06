@@ -58,7 +58,7 @@ test('leaves task notifications and sender messages to the engine', async ($, on
 })
 
 for (const columns of [32, 80, 160, 240]) {
-  test(`right-aligns a bounded bubble and aligns rows at ${columns} columns`, async $ => {
+  test(`caps the bubble and lets the engine wrap at ${columns} columns`, async $ => {
     const text = '现在继续测试，hello123。'.repeat(40)
     const ui = await $.ui.mount({
       plugin: 'user-prompt-frame',
@@ -70,63 +70,39 @@ for (const columns of [32, 80, 160, 240]) {
     })
 
     const frame = await ui.find({ type: 'Box', key: 'prompt-frame-bubble-test' })
+    const bounds = await ui.find({ type: 'Box', key: 'prompt-frame-bounds-bubble-test' })
     const bubble = await ui.find({ type: 'Box', key: 'prompt-bubble-bubble-test' })
-    const rows = await ui.findAll({ type: 'Text' })
-    const body = rows.filter(row => row.text.startsWith('│'))
-    const recovered = body.map(row => row.text.slice(3, -3).replace(/ +$/u, '')).join('')
-
     expect(frame?.props.width).toBe('100%')
     expect(frame?.props.alignItems).toBe('flex-end')
-    expect(bubble?.props.width).toBe(Math.floor(columns * 0.7))
-    expect(recovered).toBe(text)
-    expect(body.length).toBeGreaterThan(1)
+    // 上限用百分比交给引擎按真实带宽换算，模组不再按过期视口算列数。
+    expect(bounds?.props.width).toBe('70%')
+    expect(bounds?.props.alignItems).toBe('flex-end')
+    expect(bubble?.props.paddingX).toBe(2)
+    expect(bubble?.props.borderStyle).toBe('single')
+    expect(bubble?.props.borderColor).toBe('cyan')
+    expect(bubble?.props.width).toBeUndefined()
 
-    for (const row of body) {
-      expect(row.text.startsWith('│')).toBe(true)
-      expect(row.text.endsWith('│')).toBe(true)
-    }
+    // 正文保持为一个 Text 节点：换行由引擎按真实带宽处理，不再自绘定宽行。
+    const body = await ui.find({ type: 'Text', text })
+    expect(body).toBeDefined()
+    const frameRows = await ui.findAll({ type: 'Text' })
+    expect(frameRows.some(row => row.text.startsWith('│'))).toBe(false)
 
     await ui.unmount()
   })
 }
 
-test('shrinks the bubble to a short message and keeps it right-aligned', async $ => {
-  const ui = await $.ui.mount({
-    plugin: 'user-prompt-frame',
-    surface: 'terminal',
-    component: 'UserMessage',
-    requestId: 'short-bubble',
-    viewport: { columns: 80, rows: 24 },
-    props: { text: 'ok', origin: { kind: 'composer' }, isExpanded: false },
-  })
-
-  const frame = await ui.find({ type: 'Box', key: 'prompt-frame-short-bubble' })
-  const bubble = await ui.find({ type: 'Box', key: 'prompt-bubble-short-bubble' })
-  expect(frame?.props.alignItems).toBe('flex-end')
-  // 标题「 用户输入 」宽 10，加左右边框与一条横线至少需要 13 列。
-  expect(bubble?.props.width).toBe(13)
-  expect(await ui.find({ type: 'Text', text: /用户输入/ })).toBeDefined()
-  await ui.unmount()
-})
-
-test('preserves explicit newlines and blank lines', async $ => {
+test('keeps multi-line text in one engine-wrapped node', async $ => {
+  const text = '第一行\n\nsecond line\n第三行\n'
   const ui = await $.ui.mount({
     plugin: 'user-prompt-frame',
     surface: 'terminal',
     component: 'UserMessage',
     viewport: { columns: 80, rows: 40 },
-    props: {
-      text: '第一行\n\nsecond line\n第三行\n',
-      origin: { kind: 'composer' },
-      isExpanded: false,
-    },
+    props: { text, origin: { kind: 'composer' }, isExpanded: false },
   })
 
-  const rows = await ui.findAll({ type: 'Text' })
-  const body = rows.filter(row => row.text.startsWith('│'))
-  expect(body.map(row => row.text.slice(3, -3).replace(/ +$/u, ''))).toEqual([
-    '第一行', '', 'second line', '第三行', '',
-  ])
+  expect(await ui.find({ type: 'Text', text })).toBeDefined()
   await ui.unmount()
 })
 
@@ -213,3 +189,47 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await ui.unmount()
   })
 }
+
+test('maps the saved corner glyphs back to an engine border style', async ($, on) => {
+  mock.env(on, { HOME: 'D:/test-home' })
+  on('fs.read', () => ({
+    value: JSON.stringify({
+      promptFrame: {
+        title: '圆角',
+        topLeft: '╭',
+        topRight: '╮',
+        bottomLeft: '╰',
+        bottomRight: '╯',
+      },
+    }),
+  }))
+  const ui = await $.ui.mount({
+    plugin: 'user-prompt-frame',
+    surface: 'terminal',
+    component: 'UserMessage',
+    requestId: 'round-bubble',
+    props: { text: '旧配置', origin: { kind: 'composer' }, isExpanded: true },
+  })
+
+  expect((await ui.find({ type: 'Box', key: 'prompt-bubble-round-bubble' }))?.props.borderStyle).toBe('round')
+  await ui.unmount()
+})
+
+test('prefers an explicit borderStyle over the saved glyphs', async ($, on) => {
+  mock.env(on, { HOME: 'D:/test-home' })
+  on('fs.read', () => ({
+    value: JSON.stringify({
+      promptFrame: { title: '双线', borderStyle: 'double', topLeft: '┌', topRight: '┐', bottomLeft: '└', bottomRight: '┘' },
+    }),
+  }))
+  const ui = await $.ui.mount({
+    plugin: 'user-prompt-frame',
+    surface: 'terminal',
+    component: 'UserMessage',
+    requestId: 'double-bubble',
+    props: { text: '新配置', origin: { kind: 'composer' }, isExpanded: true },
+  })
+
+  expect((await ui.find({ type: 'Box', key: 'prompt-bubble-double-bubble' }))?.props.borderStyle).toBe('double')
+  await ui.unmount()
+})

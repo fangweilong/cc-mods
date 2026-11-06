@@ -1,46 +1,76 @@
 import type { EngineInterface, Register } from 'claude-code'
 
-const DEFAULT_WIDTH = 72
-/** 气泡最大宽度占可用视口的比例，右侧留白，贴近 IM 消息样式。 */
-const MAX_BUBBLE_RATIO = 0.7
-/** 气泡右侧留白，避开 transcript 行末的引擎标记。 */
-const VIEWPORT_GUTTER = 4
-/** 边框左右各 1 列，内容左右各留白 2 列。 */
-const FRAME_CHROME = 6
-const HORIZONTAL = '─'
-const NON_BREAKING_SPACE = ' '
+/**
+ * 气泡最大宽度占可用宽度的比例，右侧留白，贴近 IM 消息样式。
+ *
+ * 用百分比而不是按 `viewport.columns` 算出的列数：比例由引擎在布局时按真实
+ * 带宽换算，模组这边即使拿到过期的视口宽度也不会把气泡撑出内容区。
+ */
+const MAX_BUBBLE_WIDTH = '70%'
+/** 边框内左右留白，保持原自绘边框的视觉缩进。 */
+const BUBBLE_PADDING_X = 2
 
-const DEFAULT_FRAME_CONFIG = {
-  title: '用户输入',
-  color: 'cyan',
-  horizontal: '─',
-  vertical: '│',
-  topLeft: '┌',
-  topRight: '┐',
-  bottomLeft: '└',
-  bottomRight: '┘',
-} as const
+/**
+ * 引擎的边框样式。旧配置保存的是自绘的四个角符号，加载时映射回这里，
+ * 避免升级后用户选过的圆角、双线边框直接失效。
+ */
+const BORDER_STYLES = ['single', 'round', 'bold', 'double', 'classic'] as const
+type BorderStyle = (typeof BORDER_STYLES)[number]
+
+/** 四角符号组合 → 引擎边框样式；未收录的组合退回 `single`。 */
+const BORDER_STYLE_BY_CORNERS: Record<string, BorderStyle> = {
+  '┌┐└┘': 'single',
+  '╭╮╰╯': 'round',
+  '┏┓┗┛': 'bold',
+  '╔╗╚╝': 'double',
+  '++++': 'classic',
+}
 
 type FrameConfig = {
   title: string
   color: string
-  horizontal: string
-  vertical: string
-  topLeft: string
-  topRight: string
-  bottomLeft: string
-  bottomRight: string
+  borderStyle: BorderStyle
 }
 
+const DEFAULT_FRAME_CONFIG: FrameConfig = {
+  title: '用户输入',
+  color: 'cyan',
+  borderStyle: 'single',
+}
+
+function pickBorderStyle(value: unknown): BorderStyle | undefined {
+  if (typeof value !== 'string') return undefined
+  const match = BORDER_STYLES.find(style => style === value)
+  return match
+}
+
+/**
+ * 归一化 `promptFrame` 段。
+ *
+ * 优先读取显式的 `borderStyle`；没有时用旧配置的四个角符号反查样式，
+ * 这样 `cc-mods-config` 面板里保存的旧格式仍然能决定边框外观。
+ */
 function normalizeFrameConfig(value: unknown): FrameConfig {
   const result: FrameConfig = { ...DEFAULT_FRAME_CONFIG }
   if (!value || typeof value !== 'object') return result
 
   const frame = value as Record<string, unknown>
-  for (const field of Object.keys(result) as Array<keyof FrameConfig>) {
-    if (typeof frame[field] === 'string' && frame[field].length > 0) {
-      result[field] = frame[field]
-    }
+  if (typeof frame.title === 'string' && frame.title.trim().length > 0) {
+    result.title = frame.title
+  }
+  if (typeof frame.color === 'string' && frame.color.length > 0) {
+    result.color = frame.color
+  }
+
+  const explicit = pickBorderStyle(frame.borderStyle)
+  if (explicit) {
+    result.borderStyle = explicit
+    return result
+  }
+
+  const corners = [frame.topLeft, frame.topRight, frame.bottomLeft, frame.bottomRight]
+  if (corners.every(corner => typeof corner === 'string' && corner.length > 0)) {
+    result.borderStyle = BORDER_STYLE_BY_CORNERS[corners.join('')] ?? DEFAULT_FRAME_CONFIG.borderStyle
   }
   return result
 }
@@ -60,69 +90,6 @@ async function loadFrameConfig($: EngineInterface): Promise<FrameConfig> {
   }
 }
 
-function characterWidth(character: string): number {
-  const codePoint = character.codePointAt(0) ?? 0
-
-  if (
-    (codePoint >= 0x1100 && codePoint <= 0x115f) ||
-    codePoint === 0x2329 ||
-    codePoint === 0x232a ||
-    (codePoint >= 0x2e80 && codePoint <= 0xa4cf) ||
-    (codePoint >= 0xac00 && codePoint <= 0xd7a3) ||
-    (codePoint >= 0xf900 && codePoint <= 0xfaff) ||
-    (codePoint >= 0xfe10 && codePoint <= 0xfe6f) ||
-    (codePoint >= 0xff00 && codePoint <= 0xff60) ||
-    (codePoint >= 0xffe0 && codePoint <= 0xffe6) ||
-    (codePoint >= 0x1f300 && codePoint <= 0x1faff)
-  ) {
-    return 2
-  }
-
-  return 1
-}
-
-function displayWidth(text: string): number {
-  return Array.from(text).reduce((width, character) => width + characterWidth(character), 0)
-}
-
-function naturalContentWidth(text: string): number {
-  return text.split('\n').reduce((width, line) => Math.max(width, displayWidth(line)), 0)
-}
-
-function wrapText(text: string, width: number): string[] {
-  const lines: string[] = []
-
-  for (const paragraph of text.split('\n')) {
-    if (paragraph.length === 0) {
-      lines.push('')
-      continue
-    }
-
-    let line = ''
-    let lineWidth = 0
-
-    for (const character of Array.from(paragraph)) {
-      const characterWidthValue = characterWidth(character)
-      if (line && lineWidth + characterWidthValue > width) {
-        lines.push(line)
-        line = ''
-        lineWidth = 0
-      }
-
-      line += character
-      lineWidth += characterWidthValue
-    }
-
-    lines.push(line)
-  }
-
-  return lines.length > 0 ? lines : ['']
-}
-
-function padLine(line: string, width: number): string {
-  return line + NON_BREAKING_SPACE.repeat(Math.max(0, width - displayWidth(line)))
-}
-
 export const register: Register = on => {
   on('ui.render', { component: 'UserMessage' }, async ($, e, next) => {
     const isComposerPrompt = e.props.origin.kind === 'composer'
@@ -135,31 +102,36 @@ export const register: Register = on => {
 
     const frame = await loadFrameConfig($)
     const { Box, Text } = $.ui.resolve(e)
-    const viewportWidth = e.viewport?.columns ?? DEFAULT_WIDTH
-    const availableWidth = Math.max(1, viewportWidth - VIEWPORT_GUTTER)
-    const title = ` ${frame.title.replace(/[\r\n]/gu, ' ').trim()} `
-    const titleWidth = displayWidth(title)
-    // 标题行至少要容下左右边框、一条横线和标题本身。
-    const maxBubbleWidth = Math.max(
-      titleWidth + 3,
-      Math.min(availableWidth, Math.floor(viewportWidth * MAX_BUBBLE_RATIO)),
-    )
-    const naturalWidth = naturalContentWidth(e.props.text) + FRAME_CHROME
-    const bubbleWidth = Math.min(maxBubbleWidth, Math.max(naturalWidth, titleWidth + 3))
-    const contentWidth = Math.max(1, bubbleWidth - FRAME_CHROME)
-    const body = wrapText(e.props.text, contentWidth)
-    const innerWidth = bubbleWidth - 2
-    const top = `${frame.topLeft}${frame.horizontal}${title}${frame.horizontal.repeat(Math.max(0, innerWidth - 1 - titleWidth))}${frame.topRight}`
-    const bottom = `${frame.bottomLeft}${frame.horizontal.repeat(bubbleWidth - 2)}${frame.bottomRight}`
+    const title = frame.title.replace(/[\r\n]/gu, ' ').trim()
 
+    // 边框和换行都由引擎负责：自绘「│ 内容 │」这类定宽行一旦和引擎实际给出的带宽
+    // 差一个格子，整行会被折到下一行第 0 列，多行消息看起来就像边框错位成两个框。
+    // 中间那层定宽容器只负责给气泡设上限并右对齐，短消息仍由气泡自适应收缩。
     return (
-      <Box key={`prompt-frame-${e.requestId}`} width="100%" flexDirection="column" alignItems="flex-end">
-        <Box key={`prompt-bubble-${e.requestId}`} width={bubbleWidth} flexDirection="column">
-          <Text weight="bold" color={frame.color}>{top}</Text>
-          {body.map((line, index) => (
-            <Text key={`prompt-line-${index}`}>{frame.vertical}{NON_BREAKING_SPACE.repeat(2)}{padLine(line, contentWidth)}{NON_BREAKING_SPACE.repeat(2)}{frame.vertical}</Text>
-          ))}
-          <Text weight="bold" color={frame.color}>{bottom}</Text>
+      <Box
+        key={`prompt-frame-${e.requestId}`}
+        width="100%"
+        flexDirection="column"
+        alignItems="flex-end"
+        gap={0}
+      >
+        <Text key={`prompt-frame-title-${e.requestId}`} color={frame.color}>{title}</Text>
+        <Box
+          key={`prompt-frame-bounds-${e.requestId}`}
+          width={MAX_BUBBLE_WIDTH}
+          flexDirection="column"
+          alignItems="flex-end"
+          gap={0}
+        >
+          <Box
+            key={`prompt-bubble-${e.requestId}`}
+            flexDirection="column"
+            paddingX={BUBBLE_PADDING_X}
+            borderStyle={frame.borderStyle}
+            borderColor={frame.color}
+          >
+            <Text>{e.props.text}</Text>
+          </Box>
         </Box>
       </Box>
     )

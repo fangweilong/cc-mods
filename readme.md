@@ -38,7 +38,7 @@ Claude Code Mod 集合，提供状态栏、Subagent 实时面板、用户输入�
 | `subagent-split-view/` | `subagent-split-view` | 在 Claude Code 右侧打开实时 Subagent 面板，展示 Subagent 的名称、类型、模型、任务、当前活动、thinking/text 流、工具调用及执行结果；Subagent 全部结束后自动关闭面板。 |
 | `i18n-mod/` | `i18n-mod` | 汉化已开放的运行状态、快捷键、模式、部分提示、`/config` 标签/说明、斜杠命令描述与精确工具描述；耗时默认原生，可手动启用中性自定义耗时行。按需读取 JSON 语言包，支持简体中文与 English 原文模式；通过统一 `/my-cc-mods-config` 面板选择语言及耗时设置，新增语言无需注册。 |
 | `timestamp-mod/` | `timestamp-mod` | 显示用户消息时间、工具调用耗时与该请求的 Token 用量，以及每段回答的实时/精确 TPS；通过统一配置面板控制启用状态、TPS 开关与时间格式。 |
-| `user-prompt-frame/` | `user-prompt-frame` | 为用户消息添加“用户输入”边框，按终端宽度自适应，并按终端显示宽度处理中文、英文和 Emoji 混排；任务通知、其他会话消息和 Agent 消息仍使用 Claude Code 默认渲染。 |
+| `user-prompt-frame/` | `user-prompt-frame` | 为用户消息添加“用户输入”气泡边框：边框与换行由引擎绘制，宽度不超过可用带宽的 70% 并右对齐，多行和中英混排不会错位；任务通知、其他会话消息和 Agent 消息仍使用 Claude Code 默认渲染。 |
 | `todo-panel/` | `todo-panel` | 监听 Task 工具（`TaskCreate`/`TaskUpdate`/`TaskList`/`TaskGet`，兼容 `TodoWrite`）成功结果，自动打开独立任务进度 Pane；与 Subagent 面板分离。 |
 | `notification-mod/` | `notification-mod` | 主会话完成或失败时使用 `$.ui.notify` 发送成功/失败通知；主动中断和 Subagent 不通知。 |
 | `project-files/` | `project-files` | 通过 `/project-files` 打开独立文件浏览 Pane，使用 `$.fs` 浏览当前项目目录和预览文件。 |
