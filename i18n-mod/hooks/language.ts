@@ -6,6 +6,7 @@ const LANGUAGE_ID = /^[a-z]{2,8}(?:-[a-z0-9]{1,8})*$/i
 const HINT_KEYS: readonly HintKey[] = [
   'shortcuts', 'interrupt', 'background', 'expand', 'collapse', 'history', 'cycleMode', 'acceptSuggestion',
   'newline', 'commands', 'filePaths', 'sideQuestion', 'subagents', 'interruptAndSend', 'queue', 'undoDelete', 'pasteDeleted',
+  'shellMode', 'stop',
 ]
 const SPINNER_PHASES: readonly SpinnerPhase[] = ['thinking', 'requesting', 'tool-use', 'responding']
 const PACK_KEYS = ['id', 'name', 'running', 'completed', 'duration', 'turnDuration', 'hints', 'phases', 'modes', 'notices', 'messages', 'tools', 'config', 'commands', 'command']

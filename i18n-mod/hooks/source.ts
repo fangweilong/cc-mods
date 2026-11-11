@@ -22,5 +22,8 @@ export const SPINNER_WORDS = new Set([
   'sprouting', 'squishing', 'stargazing', 'stirring', 'strolling', 'swimming',
   'swinging', 'tickling', 'toasting', 'twirling', 'waddling', 'weaving',
   'whistling', 'wibbling', 'wiggling', 'wishing', 'wobbling', 'wondering',
+  'bubbling', 'dazzling', 'dreaming', 'drifting', 'finding', 'floating',
+  'fluttering', 'frolicking', 'gathering', 'humming', 'mapping', 'purring',
+  'roaming', 'shimmying', 'skipping', 'sleeping', 'tumbling', 'watching',
   'yawning', 'zooming',
 ])

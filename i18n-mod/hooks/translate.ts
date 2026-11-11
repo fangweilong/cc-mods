@@ -5,6 +5,7 @@ import type { CommandTranslation, ConfigTranslation, HintKey, LanguagePack } fro
 const HINT_RULES: readonly { pattern: RegExp; key: HintKey; bindings?: readonly string[] }[] = [
   { pattern: /^(.*?) for shortcuts$/i, key: 'shortcuts' },
   { pattern: /^(.*?) to interrupt$/i, key: 'interrupt' },
+  { pattern: /^(.*?) to stop$/i, key: 'stop' },
   { pattern: /^(.*?) to run in background$/i, key: 'background' },
   { pattern: /^(.*?) to expand$/i, key: 'expand' },
   { pattern: /^(.*?) to collapse$/i, key: 'collapse' },
@@ -14,6 +15,7 @@ const HINT_RULES: readonly { pattern: RegExp; key: HintKey; bindings?: readonly 
   { pattern: /^(.*?) for newlines?$/i, key: 'newline' },
   { pattern: /^(.*?) for commands$/i, key: 'commands', bindings: ['/'] },
   { pattern: /^(.*?) for file paths$/i, key: 'filePaths', bindings: ['@'] },
+  { pattern: /^(.*?) for shell mode$/i, key: 'shellMode', bindings: ['!'] },
   { pattern: /^(.*?) for side question$/i, key: 'sideQuestion', bindings: ['/btw'] },
   { pattern: /^(.*?) to see subagents$/i, key: 'subagents', bindings: ['/tasks'] },
   { pattern: /^(.*?) to interrupt and send$/i, key: 'interruptAndSend' },

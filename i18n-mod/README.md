@@ -12,7 +12,7 @@ claude --plugin-dir ".\i18n-mod"
 
 已将 `CLAUDE_CODE_PLUGIN_DIRS` 指向本仓库根目录时，重新加载插件或重启 Claude Code 后会发现此 Mod。本 Mod 不自行修改用户全局配置或其他 Mod；主动保存语言来源或耗时行设置时，通过宿主配置 API 保存自己的选项。
 
-最初对接基于 Claude Code **2.1.294**；自定义耗时行的公开 API 核对和自动化验证基于 **2.1.302**（2026-10-19），不代表真实终端验收已完成。Mod API 仍是 Early Access，不保证旧版本兼容，也不保证所有客户端都有相同渲染位置。
+最初对接基于 Claude Code **2.1.294**；自定义耗时行的公开 API 核对和自动化验证基于 **2.1.302**（2026-10-19）；界面文案核对基于 **2.1.322**（2026-11-11），不代表真实终端验收已完成。Mod API 仍是 Early Access，不保证旧版本兼容，也不保证所有客户端都有相同渲染位置。
 
 ## 配置与语言选择
 
@@ -130,7 +130,7 @@ claude --plugin-dir ".\i18n-mod"
 | `running` | 可选，运行中状态显示标签 |
 | `completed`、`duration` | 兼容旧语言包的可选字段，当前不用于渲染；`completed` 为字符串，`duration` 为包含 `{duration}` 的模板字符串；不映射为新耗时模板 |
 | `turnDuration` | 可选对象，接受 `elapsed` 与 `waiting`：`elapsed` 必须含 `{duration}`；`waiting` 必须含 `{agents}`，用于等待后台 Agent 的行 |
-| `hints` | 可选。支持 `shortcuts`、`interrupt`、`background`、`expand`、`collapse`、`history`、`cycleMode`、`acceptSuggestion`、`newline`、`commands`、`filePaths`、`sideQuestion`、`subagents`、`interruptAndSend`、`queue`、`undoDelete`、`pasteDeleted`；只填译文，快捷键由代码保留 |
+| `hints` | 可选。支持 `shortcuts`、`interrupt`、`stop`、`background`、`expand`、`collapse`、`history`、`cycleMode`、`acceptSuggestion`、`newline`、`commands`、`filePaths`、`shellMode`、`sideQuestion`、`subagents`、`interruptAndSend`、`queue`、`undoDelete`、`pasteDeleted`；只填译文，快捷键由代码保留 |
 | `phases` | 可选 Spinner 阶段词：`thinking`、`requesting`、`tool-use`、`responding`；存在时优先于 `running` 统一词 |
 | `modes`、`notices`、`messages` | 可选的 `原文 → 译文` 字符串词典，精确匹配 |
 | `tools` | 可选的工具完整 description `原文 → 译文` 字符串词典，精确匹配，不改工具名、参数 schema 或延迟状态 |
@@ -168,11 +168,11 @@ claude --plugin-dir ".\i18n-mod"
 
 | 界面位置 | 当前中文覆盖 | 保留内容 |
 | --- | --- | --- |
-| 运行状态 `Spinner` | 识别 **134 个原文状态词**；配置 `phases` 后按 `thinking`、`requesting`、`tool-use`、`responding` 显示“思考中”“等待响应”“调用工具”“回复中”，否则回退统一“处理中”；另有 **10 条精确状态文案**，包括“思考中”“等待响应”“正在压缩会话”及省略号变体 | 动态任务描述、后缀、宿主计时及 Token 信息 |
-| 输入框提示 `PromptHint` | **17 类纯文本快捷提示**：快捷键、中断、后台运行、展开、收起、历史、切换模式、接受建议、换行、命令、文件路径、侧问、查看子代理、中断并发送、排队、撤销删除、粘贴已删除文本；没有 `tail` 且每一段均为已确认静态文本时翻译 | 实际快捷键、分隔符；含任务按钮、链接、未知片段或已有自定义尾部的行原样透传 |
+| 运行状态 `Spinner` | 识别 **152 个原文状态词**；配置 `phases` 后按 `thinking`、`requesting`、`tool-use`、`responding` 显示“思考中”“等待响应”“调用工具”“回复中”，否则回退统一“处理中”；另有 **40 条精确状态文案**，包括“思考中”“等待响应”“正在压缩会话”及加载、保存、认证等省略号变体 | 动态任务描述、后缀、宿主计时及 Token 信息 |
+| 输入框提示 `PromptHint` | **19 类纯文本快捷提示规则**：快捷键、中断、停止、后台运行、展开、收起、历史、切换模式、接受建议、换行、命令、文件路径、Shell 模式、侧问、查看子代理、中断并发送、排队、撤销删除、粘贴已删除文本；没有 `tail` 且每一段均为已确认静态文本时翻译 | 实际快捷键、分隔符；含任务按钮、链接、未知片段或已有自定义尾部的行原样透传。2.1.322 底部固定的 `! for shell mode`、`ctrl+x to stop` 不经过此 render site |
 | 工具进度 `ToolProgress` | **1 类提示**：“转入后台运行”，复用快捷提示词典中的 `background` | 工具身份及执行行为 |
-| 模式标签 `SessionMode` | **6 条标签**：专注、记忆暂停、接受编辑、计划模式、自动模式、权限绕过 | 未知模式及顺序 |
-| 提示通知 `InfoNotice` | **7 条固定/前缀通知文案**，见下表 | 动态后缀、尾部命令、可见性信息及未收录提示 |
+| 模式标签 `SessionMode` | 翻译宿主实际传入 `SessionMode` render site 的模式值；语言包已预留专注、记忆暂停、权限与账户记忆等词条 | 2.1.322 的 `accept edits on`、`plan mode on`、`auto mode on` 等权限 footer 标签由宿主直接绘制，不经过此 render site |
+| 提示通知 `InfoNotice` | **3 条固定/前缀通知文案**，见下表 | 动态后缀、尾部命令、可见性信息及未收录提示 |
 | 后台任务通知 `UserMessage` | 仅 `origin.kind === 'task-notification'` 的行做前缀翻译 | 用户输入、其他会话/teammate 消息、任务 id 与耗时 |
 | 临时提示 `ui.toast` / 工具通知 `ui.notice` | 与通知共用前缀词典 | 动态后缀、路径、命令参数及未收录文本 |
 | 可选自定义耗时行 `TurnDuration`（仅 terminal） | 手动选 `custom` 且模板有效时显示“本轮用时 …”；等待后台 Agent 时按 `waiting` 模板显示“等待 N 个后台 Agent 完成”，不依赖完成词表 | 默认 `native`；English 保持原生。自定义不含原生结束时刻、后台及预算等统计；等待中同时有 workflow 时回退原生 |
@@ -182,7 +182,7 @@ claude --plugin-dir ".\i18n-mod"
 
 状态词数量是可识别的原文数量，不是不同译文数量；省略号变体分别计入精确文案。后台运行提示在两个渲染位置复用，不应将它重复计为新增译文。
 
-`commands` 以当前宿主（2.1.307）的内置命令名为键，并包含常用别名；只处理 `provider.plugin === 'engine'` 的命令。插件注册的命令、用户自定义命令和命令执行后打开的原生面板不在此词典范围内，`command.describe` 只影响补全菜单与 `/help`。
+`commands` 以当前宿主（2.1.322）的内置命令名为键，并包含常用别名；只处理 `provider.plugin === 'engine'` 的命令。插件注册的命令、用户自定义命令和命令执行后打开的原生面板不在此词典范围内，`command.describe` 只影响补全菜单与 `/help`。
 
 ### 未命中样本采集
 
@@ -192,13 +192,9 @@ claude --plugin-dir ".\i18n-mod"
 
 | 原文 | 中文 |
 | --- | --- |
-| `Welcome back!` | 欢迎回来！ |
 | `Welcome to Claude Code!` | 欢迎使用 Claude Code！ |
-| `Tips for getting started` | 入门提示 |
-| `Context left until auto-compact` | 自动压缩前剩余上下文 |
 | `Auto-update failed` | 自动更新失败 |
 | `Update available` | 有可用更新 |
-| `Using custom model` | 正在使用自定义模型 |
 
 只有宿主通过 `InfoNotice` 传入与词典键完全相同的文本时才会翻译；现在也支持在已知词典键后追加以空格或冒号分隔的动态后缀，例如将 `Update available: 2.1.301` 翻译为 `有可用更新: 2.1.301`。前缀规则由代码安全生成，语言包只能提供普通文本键，不能提供正则。收录某条文案不表示所有显示该文案的界面都开放了这个渲染位置；未收录的动态文本会保留原文。
 
@@ -210,7 +206,7 @@ claude --plugin-dir ".\i18n-mod"
 
 ### 尚不覆盖
 
-- 权限确认弹窗、原生登录等未开放界面；`/config` 只开放标签与说明的 `config.describe`，原生行内的布尔/枚举取值没有可改写的 hook，不能通过语言包汉化。`/status`、`/usage`、`/stats` 等原生面板也没有对应 render site。
+- 权限确认弹窗、原生登录和 composer footer 等未开放界面；2.1.322 的 `! for shell mode`、`ctrl+x to stop`、`accept edits on`、`plan mode on`、`auto mode on` 等固定提示不经过公开 render site，不能通过本语言包汉化。`/config` 只开放标签与说明的 `config.describe`，原生行内的布尔/枚举取值没有可改写的 hook，不能通过语言包汉化。`/status`、`/usage`、`/stats` 等原生面板也没有对应 render site。
 - 命令执行后打开的原生交互面板；`command.describe` 只影响补全菜单和 `/help`，不会翻译面板内容。
 - 工具调用展示、工具参数、工具结果和命令输出。`CommandOutput` 尚未接入：它包含路径、命令和动态结果，逐行替换容易破坏格式，等待样本确认后再按白名单做精确匹配。
 - `ui.status` 未接入：状态行可能由 `statusline-mod` 等其他插件写入，改写会与它们的状态文本冲突。

@@ -25,7 +25,9 @@
     "interruptAndSend": "中断并发送",
     "queue": "排队",
     "undoDelete": "撤销删除",
-    "pasteDeleted": "粘贴已删除文本"
+    "pasteDeleted": "粘贴已删除文本",
+    "shellMode": "Shell 模式",
+    "stop": "停止"
   },
   "phases": {
     "thinking": "思考中",
@@ -39,7 +41,11 @@
     "accept edits on": "自动接受编辑已开启",
     "plan mode on": "计划模式已开启",
     "auto mode on": "自动模式已开启",
-    "bypass permissions on": "权限绕过已开启"
+    "bypass permissions on": "权限绕过已开启",
+    "manual mode on": "手动模式已开启",
+    "don't ask on": "不再询问已开启",
+    "account memory: read-only": "账户记忆：只读",
+    "account memory: off": "账户记忆：关闭"
   },
   "messages": {
     "Working": "处理中",
@@ -51,7 +57,37 @@
     "Waiting for response...": "等待响应...",
     "Compacting conversation": "正在压缩会话",
     "Compacting conversation…": "正在压缩会话…",
-    "Compacting conversation...": "正在压缩会话..."
+    "Compacting conversation...": "正在压缩会话...",
+    "Loading…": "加载中…",
+    "Loading session…": "正在加载会话…",
+    "Loading conversations…": "正在加载对话…",
+    "Loading Claude Code sessions…": "正在加载 Claude Code 会话…",
+    "Loading diff…": "正在加载 diff…",
+    "Loading environments…": "正在加载环境…",
+    "Loading artifacts…": "正在加载 Artifacts…",
+    "Loading dynamic workflow history…": "正在加载动态 workflow 历史…",
+    "Loading usage credit status…": "正在加载用量额度状态…",
+    "Reading…": "读取中…",
+    "Reading the cloud session's rules…": "正在读取云会话规则…",
+    "Reading ~/.aws/config…": "正在读取 ~/.aws/config…",
+    "Reading ~/.config/gcloud…": "正在读取 ~/.config/gcloud…",
+    "Saving…": "保存中…",
+    "Saving design credential…": "正在保存设计凭据…",
+    "Updating…": "更新中…",
+    "Updating spend limit…": "正在更新支出上限…",
+    "Activating plugin…": "正在启用插件…",
+    "Asking the cloud session for its memory files…": "正在向云会话请求记忆文件…",
+    "Calling Google Cloud…": "正在调用 Google Cloud…",
+    "Checking GitHub CLI installation…": "正在检查 GitHub CLI 安装…",
+    "Checking usage credits…": "正在检查用量额度…",
+    "Establishing connection to MCP server": "正在建立 MCP 服务器连接",
+    "Opening browser to sign in with your Claude account…": "正在打开浏览器以登录 Claude 账号…",
+    "Processing authentication…": "正在处理认证…",
+    "Resuming conversation…": "正在恢复对话…",
+    "Sending request to your admin…": "正在向管理员发送请求…",
+    "Starting authentication…": "正在开始认证…",
+    "Starting design login…": "正在开始设计登录…",
+    "Waiting for browser authorization…": "等待浏览器授权…"
   },
   "tools": {
     "Run a shell command": "运行 Shell 命令",
@@ -75,6 +111,7 @@
     "bug": { "description": "报告问题或分享对话" },
     "cd": { "description": "将会话切换到新的工作目录", "argumentHint": "<路径>" },
     "checkup": { "description": "健康检查你的配置并修复问题" },
+    "chrome": { "description": "打开 Claude in Chrome 设置" },
     "clear": { "description": "开启空上下文的新会话；原会话仍保存在磁盘（可用 /resume 恢复）", "argumentHint": "[名称]" },
     "cloud-plugins": { "description": "选择云会话是否使用本机启用的插件" },
     "color": { "description": "设置当前会话的提示栏颜色" },
@@ -118,6 +155,7 @@
     "mobile": { "description": "显示下载 Claude 移动应用的二维码" },
     "model": { "description": "设置 Claude Code 使用的 AI 模型", "argumentHint": "<模型>" },
     "output-style": { "description": "列出或切换输出风格" },
+    "passes": { "description": "与朋友分享一周免费的 Claude Code" },
     "permissions": { "description": "管理工具权限的允许与拒绝规则" },
     "plan": { "description": "启用计划模式或查看当前会话计划" },
     "plugin": { "description": "管理 Claude Code 插件" },
@@ -159,6 +197,7 @@
     "upgrade": { "description": "升级到 Max 以获得更高用量限制和更多 Opus" },
     "usage": { "description": "显示会话费用、计划用量和活动统计" },
     "usage-credits": { "description": "配置用量额度，或在达到限制时向管理员申请" },
+    "use-case": { "description": "选择适用于你的请求的生命科学用例", "argumentHint": "[用例]" },
     "version": { "description": "显示当前会话版本（自动更新可能有更新版本）" },
     "voice": { "description": "切换语音模式" },
     "web-setup": { "description": "使用 GitHub 账号设置云会话" },
@@ -256,13 +295,9 @@
     }
   },
   "notices": {
-    "Welcome back!": "欢迎回来！",
     "Welcome to Claude Code!": "欢迎使用 Claude Code！",
-    "Tips for getting started": "入门提示",
-    "Context left until auto-compact": "自动压缩前剩余上下文",
     "Auto-update failed": "自动更新失败",
-    "Update available": "有可用更新",
-    "Using custom model": "正在使用自定义模型"
+    "Update available": "有可用更新"
   },
   "command": {
     "description": "选择界面提示的显示语言",

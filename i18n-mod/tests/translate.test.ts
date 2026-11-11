@@ -6,6 +6,7 @@ import { formatMessage, translateCommand, translateConfig, translateExact, trans
 for (const [original, translated] of [
   ['? for shortcuts', '? 查看快捷键'],
   ['esc to interrupt', 'esc 中断'],
+  ['ctrl+x to stop', 'ctrl+x 停止'],
   ['(ctrl+b to run in background)', '(ctrl+b 转入后台运行)'],
   ['(alt+r to run in background)', '(alt+r 转入后台运行)'],
   ['ctrl+o to expand', 'ctrl+o 展开'],
@@ -18,6 +19,7 @@ for (const [original, translated] of [
   ['Option+Enter for newlines', 'Option+Enter 换行'],
   ['/ for commands', '/ 命令'],
   ['@ for file paths', '@ 文件路径'],
+  ['! for shell mode', '! Shell 模式'],
   ['/btw for side question', '/btw 侧问'],
   ['/tasks to see subagents', '/tasks 查看子代理'],
   ['enter to interrupt and send', 'enter 中断并发送'],

@@ -16,6 +16,8 @@ export type HintKey =
   | 'queue'
   | 'undoDelete'
   | 'pasteDeleted'
+  | 'shellMode'
+  | 'stop'
 
 /** Spinner 行按回合阶段显示；tool-input 不在可见阶段内。 */
 export type SpinnerPhase = 'thinking' | 'requesting' | 'tool-use' | 'responding'

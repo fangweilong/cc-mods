@@ -9,7 +9,7 @@ export const ZH_DATA = {
     collapse: '收起', history: '查看历史', cycleMode: '切换模式', acceptSuggestion: '接受建议',
     newline: '换行', commands: '命令', filePaths: '文件路径', sideQuestion: '侧问',
     subagents: '查看子代理', interruptAndSend: '中断并发送', queue: '排队',
-    undoDelete: '撤销删除', pasteDeleted: '粘贴已删除文本',
+    undoDelete: '撤销删除', pasteDeleted: '粘贴已删除文本', shellMode: 'Shell 模式', stop: '停止',
   },
   phases: { thinking: '思考中', requesting: '等待响应', 'tool-use': '调用工具', responding: '回复中' },
   modes: { focus: '专注模式', 'memory paused': '记忆已暂停' },
